@@ -1171,76 +1171,34 @@ with tab6:
             accuracy = diag_b / total_b * 100 if total_b > 0 else 0
 
             if tipo_m == "Ore/Waste (binario)" and 'mineral' in ct.index and 'mineral' in ct.columns:
-                # NEW 2: métricas de clasificación binary
                 TP = int(ct.loc['mineral', 'mineral'])
+                TN = int(ct.loc['esteril', 'esteril']) if ('esteril' in ct.index and 'esteril' in ct.columns) else 0
                 FP = int(ct.loc['esteril', 'mineral']) if 'esteril' in ct.index else 0
                 FN = int(ct.loc['mineral', 'esteril']) if 'esteril' in ct.columns else 0
 
-                precision_v = TP / (TP + FP) * 100 if (TP + FP) > 0 else 0
-                recall_v    = TP / (TP + FN) * 100 if (TP + FN) > 0 else 0
-                f1_v        = (2 * precision_v * recall_v / (precision_v + recall_v)
-                               if (precision_v + recall_v) > 0 else 0)
-                dilucion_v  = FP / (TP + FP) * 100 if (TP + FP) > 0 else 0
-                perdida_v   = FN / (TP + FN) * 100 if (TP + FN) > 0 else 0
+                perdida_v  = FN / (TP + FN) * 100 if (TP + FN) > 0 else 0
+                ganancia_v = FP / (TN + FP) * 100 if (TN + FP) > 0 else 0
 
-                # Fila 1: accuracy + bloques + total
+                # 6 cards en 2 filas de 3
                 r1 = st.columns(3)
                 with r1[0]:
-                    st.markdown(_metric_html('Precisión diagonal', f'{accuracy:.1f}%'), unsafe_allow_html=True)
+                    st.markdown(_metric_html('Coincidencia Mineral', f'{TP:,}', 'green'), unsafe_allow_html=True)
                 with r1[1]:
-                    st.markdown(_metric_html('Bloques correctos', f'{diag_b:,}'), unsafe_allow_html=True)
+                    st.markdown(_metric_html('Coincidencia Estéril', f'{TN:,}', 'green'), unsafe_allow_html=True)
                 with r1[2]:
-                    st.markdown(_metric_html('Total evaluados', f'{total_b:,}'), unsafe_allow_html=True)
+                    st.markdown(_metric_html('Pérdida (Min→Est)', f'{FN:,} ({perdida_v:.1f}%)', 'red'), unsafe_allow_html=True)
 
-                # Fila 2: precisión, recall, F1
-                st.markdown("##### Indicadores de clasificación (mineral vs estéril)")
-                r2 = st.columns(5)
+                r2 = st.columns(3)
                 with r2[0]:
-                    st.markdown(_metric_html('Precisión', f'{precision_v:.1f}%', 'green'),
-                                unsafe_allow_html=True)
+                    st.markdown(_metric_html('Ganancia (Est→Min)', f'{FP:,} ({ganancia_v:.1f}%)', 'blue'), unsafe_allow_html=True)
                 with r2[1]:
-                    st.markdown(_metric_html('Recall', f'{recall_v:.1f}%', 'green'),
-                                unsafe_allow_html=True)
+                    st.markdown(_metric_html('Mineral Proyectado (MP)', f'{min_proy:,}' if min_proy is not None else '—'), unsafe_allow_html=True)
                 with r2[2]:
-                    st.markdown(_metric_html('F1 Score', f'{f1_v:.1f}%', 'blue'),
-                                unsafe_allow_html=True)
-                with r2[3]:
-                    st.markdown(_metric_html('Dilución (%)', f'{dilucion_v:.1f}%', 'red'),
-                                unsafe_allow_html=True)
-                with r2[4]:
-                    st.markdown(_metric_html('Pérdida (%)', f'{perdida_v:.1f}%', 'red'),
-                                unsafe_allow_html=True)
-
-                # Fila 3: mineral proy/real
-                r3 = st.columns(2)
-                if min_proy is not None:
-                    with r3[0]:
-                        st.markdown(_metric_html('Mineral proy. (MP)', f'{min_proy:,}'),
-                                    unsafe_allow_html=True)
-                    with r3[1]:
-                        st.markdown(_metric_html('Mineral real (CP)', f'{min_real:,}'),
-                                    unsafe_allow_html=True)
+                    st.markdown(_metric_html('Mineral Real (CP)', f'{min_real:,}' if min_real is not None else '—'), unsafe_allow_html=True)
 
             else:
-                # Ocurrencia: solo métricas base
-                n_cols   = 5 if min_proy is not None else 3
-                cols_met = st.columns(n_cols)
-                with cols_met[0]:
-                    st.markdown(_metric_html('Precisión diagonal', f'{accuracy:.1f}%'),
-                                unsafe_allow_html=True)
-                with cols_met[1]:
-                    st.markdown(_metric_html('Bloques correctos', f'{diag_b:,}'),
-                                unsafe_allow_html=True)
-                with cols_met[2]:
-                    st.markdown(_metric_html('Total evaluados', f'{total_b:,}'),
-                                unsafe_allow_html=True)
-                if min_proy is not None:
-                    with cols_met[3]:
-                        st.markdown(_metric_html('Mineral proy. (MP)', f'{min_proy:,}'),
-                                    unsafe_allow_html=True)
-                    with cols_met[4]:
-                        st.markdown(_metric_html('Mineral real (CP)', f'{min_real:,}'),
-                                    unsafe_allow_html=True)
+                # Ocurrencia: sin métricas adicionales
+                pass
 
             # ── Heatmap ──
             ct_pct = ct.div(ct.sum(axis=1), axis=0).mul(100).round(1).fillna(0)
