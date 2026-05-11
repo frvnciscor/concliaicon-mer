@@ -60,33 +60,23 @@ st.markdown("""
     /* ── Fuentes CMP ── */
     @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
 
-    /* ── Variables de color CMP ── */
+    /* ── Colores CMP fijos (no dependen del tema) ── */
     :root {
         --cmp-navy:      #003366;
         --cmp-blue:      #0055A4;
         --cmp-blue-mid:  #1A6BBF;
         --cmp-orange:    #E8650A;
         --cmp-orange-lt: #F28C3A;
-        --cmp-white:     #FFFFFF;
-        --cmp-gray-1:    #F4F6F9;
-        --cmp-gray-2:    #E8ECF1;
-        --cmp-gray-3:    #C5CDD8;
-        --cmp-gray-4:    #7A8A9C;
-        --cmp-gray-5:    #3D4E5F;
         --cmp-green:     #1E7E4A;
         --cmp-red:       #C0392B;
     }
 
-    /* ── Base ── */
+    /* ── Fuente base ── */
     html, body, [class*="css"] {
         font-family: 'Barlow', sans-serif;
-        color: var(--cmp-gray-5);
-    }
-    .stApp {
-        background-color: var(--cmp-gray-1);
     }
 
-    /* ── Títulos ── */
+    /* ── Títulos — usan var(--text-color) de Streamlit ── */
     h1 {
         font-family: 'Barlow Condensed', sans-serif;
         font-weight: 700;
@@ -100,28 +90,16 @@ st.markdown("""
     h2, h3 {
         font-family: 'Barlow Condensed', sans-serif;
         font-weight: 600;
-        color: var(--cmp-navy);
         letter-spacing: 0.3px;
     }
 
-    /* ── Sidebar ── */
+    /* ── Sidebar — azul marino CMP fijo ── */
     [data-testid="stSidebar"] {
         background-color: var(--cmp-navy) !important;
         border-right: 3px solid var(--cmp-orange);
     }
     [data-testid="stSidebar"] * {
-        color: var(--cmp-white) !important;
-    }
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stNumberInput label,
-    [data-testid="stSidebar"] .stTextInput label,
-    [data-testid="stSidebar"] .stRadio label,
-    [data-testid="stSidebar"] .stCheckbox label {
-        color: var(--cmp-gray-3) !important;
-        font-size: 12px;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        color: #FFFFFF !important;
     }
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3,
@@ -132,49 +110,29 @@ st.markdown("""
     [data-testid="stSidebar"] hr {
         border-color: rgba(255,255,255,0.15) !important;
     }
-    [data-testid="stSidebar"] .stMarkdown p {
-        color: var(--cmp-gray-3) !important;
-        font-size: 13px;
-    }
 
     /* ── Tabs ── */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: var(--cmp-white);
-        border-bottom: 2px solid var(--cmp-gray-2);
-        gap: 4px;
-    }
     .stTabs [data-baseweb="tab"] {
         font-family: 'Barlow Condensed', sans-serif;
         font-size: 14px;
         font-weight: 600;
-        color: var(--cmp-gray-4);
         letter-spacing: 0.5px;
         text-transform: uppercase;
-        padding: 10px 20px;
-        border-radius: 4px 4px 0 0;
     }
     .stTabs [aria-selected="true"] {
         color: var(--cmp-navy) !important;
         border-bottom: 3px solid var(--cmp-orange) !important;
-        background-color: var(--cmp-gray-1) !important;
-    }
-    .stTabs [data-baseweb="tab-panel"] {
-        background-color: var(--cmp-white);
-        border: 1px solid var(--cmp-gray-2);
-        border-top: none;
-        border-radius: 0 0 6px 6px;
-        padding: 20px;
     }
 
-    /* ── Metric cards ── */
+    /* ── Metric cards — fondo adaptable ── */
     .metric-card {
-        background: var(--cmp-white);
-        border: 1px solid var(--cmp-gray-2);
+        background: var(--secondary-background-color);
+        border: 1px solid rgba(0,51,102,0.15);
         border-left: 4px solid var(--cmp-blue);
         padding: 14px 18px;
         border-radius: 0 6px 6px 0;
         margin-bottom: 10px;
-        box-shadow: 0 1px 4px rgba(0,51,102,0.07);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     }
     .metric-card.red   { border-left-color: var(--cmp-red); }
     .metric-card.green { border-left-color: var(--cmp-green); }
@@ -183,17 +141,17 @@ st.markdown("""
 
     .metric-label {
         font-size: 10px;
-        color: var(--cmp-gray-4);
+        color: var(--cmp-orange);
         text-transform: uppercase;
         letter-spacing: 1.2px;
-        font-weight: 600;
+        font-weight: 700;
         font-family: 'Barlow', sans-serif;
         margin-bottom: 4px;
     }
     .metric-value {
         font-size: 24px;
         font-weight: 700;
-        color: var(--cmp-navy);
+        color: var(--text-color);
         font-family: 'Barlow Condensed', sans-serif;
         line-height: 1.1;
     }
@@ -204,31 +162,32 @@ st.markdown("""
 
     .metric-sub {
         font-size: 11px;
-        color: var(--cmp-gray-4);
+        color: var(--text-color);
+        opacity: 0.65;
         font-family: 'Barlow', sans-serif;
         margin-top: 3px;
     }
 
     /* ── Cutoff box ── */
     .cutoff-box {
-        background: var(--cmp-gray-1);
-        border: 1px solid var(--cmp-gray-2);
+        background: var(--secondary-background-color);
+        border: 1px solid rgba(0,85,164,0.2);
         border-left: 4px solid var(--cmp-blue-mid);
         padding: 10px 14px;
         border-radius: 0 4px 4px 0;
         font-size: 12px;
-        color: var(--cmp-gray-5);
+        color: var(--text-color);
         font-family: 'Barlow', sans-serif;
         margin: 6px 0;
     }
 
     /* ── Warn box ── */
     .warn-box {
-        background: #FFF8F0;
+        background: rgba(232,101,10,0.08);
         border-left: 4px solid var(--cmp-orange);
         padding: 12px 16px;
         font-size: 13px;
-        color: var(--cmp-gray-5);
+        color: var(--text-color);
         border-radius: 0 6px 6px 0;
         margin: 8px 0;
     }
@@ -236,9 +195,9 @@ st.markdown("""
     /* ── Col tags ── */
     .col-tag {
         display: inline-block;
-        background: var(--cmp-gray-2);
-        border: 1px solid var(--cmp-gray-3);
-        color: var(--cmp-navy);
+        background: rgba(0,85,164,0.12);
+        border: 1px solid rgba(0,85,164,0.25);
+        color: var(--cmp-blue);
         font-family: 'Barlow', sans-serif;
         font-size: 10px;
         font-weight: 600;
@@ -254,28 +213,13 @@ st.markdown("""
         font-weight: 600;
         letter-spacing: 0.5px;
         background-color: var(--cmp-blue) !important;
-        color: var(--cmp-white) !important;
+        color: #FFFFFF !important;
         border: none !important;
         border-radius: 4px !important;
         padding: 6px 16px !important;
     }
     div[data-testid="stDownloadButton"] > button:hover {
         background-color: var(--cmp-navy) !important;
-    }
-
-    /* ── Radio y selectbox ── */
-    .stRadio label, .stSelectbox label {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--cmp-gray-5);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    /* ── Dataframes ── */
-    [data-testid="stDataFrame"] {
-        border: 1px solid var(--cmp-gray-2);
-        border-radius: 6px;
     }
 </style>
 """, unsafe_allow_html=True)
