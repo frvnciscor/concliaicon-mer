@@ -57,180 +57,33 @@ MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* ── Fuentes CMP ── */
-    @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
-
-    /* ── Colores CMP fijos (no dependen del tema) ── */
-    :root {
-        --cmp-navy:      #003366;
-        --cmp-blue:      #0055A4;
-        --cmp-blue-mid:  #1A6BBF;
-        --cmp-orange:    #E8650A;
-        --cmp-orange-lt: #F28C3A;
-        --cmp-green:     #1E7E4A;
-        --cmp-red:       #C0392B;
-    }
-
-    /* ── Fuente base ── */
-    html, body, [class*="css"] {
-        font-family: 'Barlow', sans-serif;
-    }
-
-    /* ── Títulos — usan var(--text-color) de Streamlit ── */
-    h1 {
-        font-family: 'Barlow Condensed', sans-serif;
-        font-weight: 700;
-        font-size: 28px;
-        color: var(--cmp-navy);
-        letter-spacing: 0.5px;
-        border-bottom: 3px solid var(--cmp-orange);
-        padding-bottom: 8px;
-        margin-bottom: 16px;
-    }
-    h2, h3 {
-        font-family: 'Barlow Condensed', sans-serif;
-        font-weight: 600;
-        letter-spacing: 0.3px;
-    }
-
-    /* ── Sidebar — azul marino CMP fijo ── */
-    [data-testid="stSidebar"] {
-        background-color: var(--cmp-navy) !important;
-        border-right: 3px solid var(--cmp-orange);
-    }
-    [data-testid="stSidebar"] * {
-        color: #FFFFFF !important;
-    }
-    [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] strong {
-        color: var(--cmp-orange) !important;
-        font-family: 'Barlow Condensed', sans-serif;
-    }
-    [data-testid="stSidebar"] hr {
-        border-color: rgba(255,255,255,0.15) !important;
-    }
-
-    /* ── Tabs ── */
-    .stTabs [data-baseweb="tab"] {
-        font-family: 'Barlow Condensed', sans-serif;
-        font-size: 14px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
-    }
-    .stTabs [aria-selected="true"] {
-        color: var(--cmp-navy) !important;
-        border-bottom: 3px solid var(--cmp-orange) !important;
-    }
-
-    /* ── Metric cards — fondo adaptable ── */
-    .metric-card {
-        background: var(--secondary-background-color);
-        border: 1px solid rgba(0,51,102,0.15);
-        border-left: 4px solid var(--cmp-blue);
-        padding: 14px 18px;
-        border-radius: 0 6px 6px 0;
-        margin-bottom: 10px;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    }
-    .metric-card.red   { border-left-color: var(--cmp-red); }
-    .metric-card.green { border-left-color: var(--cmp-green); }
-    .metric-card.blue  { border-left-color: var(--cmp-blue-mid); }
-    .metric-card.orange{ border-left-color: var(--cmp-orange); }
-
-    .metric-label {
-        font-size: 10px;
-        color: var(--cmp-orange);
-        text-transform: uppercase;
-        letter-spacing: 1.2px;
-        font-weight: 700;
-        font-family: 'Barlow', sans-serif;
-        margin-bottom: 4px;
-    }
-    .metric-value {
-        font-size: 24px;
-        font-weight: 700;
-        color: var(--text-color);
-        font-family: 'Barlow Condensed', sans-serif;
-        line-height: 1.1;
-    }
-    .metric-value.red   { color: var(--cmp-red); }
-    .metric-value.green { color: var(--cmp-green); }
-    .metric-value.blue  { color: var(--cmp-blue-mid); }
-    .metric-value.orange{ color: var(--cmp-orange); }
-
-    .metric-sub {
-        font-size: 11px;
-        color: var(--text-color);
-        opacity: 0.65;
-        font-family: 'Barlow', sans-serif;
-        margin-top: 3px;
-    }
-
-    /* ── Cutoff box ── */
-    .cutoff-box {
-        background: var(--secondary-background-color);
-        border: 1px solid rgba(0,85,164,0.2);
-        border-left: 4px solid var(--cmp-blue-mid);
-        padding: 10px 14px;
-        border-radius: 0 4px 4px 0;
-        font-size: 12px;
-        color: var(--text-color);
-        font-family: 'Barlow', sans-serif;
-        margin: 6px 0;
-    }
-
-    /* ── Warn box ── */
-    .warn-box {
-        background: rgba(232,101,10,0.08);
-        border-left: 4px solid var(--cmp-orange);
-        padding: 12px 16px;
-        font-size: 13px;
-        color: var(--text-color);
-        border-radius: 0 6px 6px 0;
-        margin: 8px 0;
-    }
-
-    /* ── Col tags ── */
-    .col-tag {
-        display: inline-block;
-        background: rgba(0,85,164,0.12);
-        border: 1px solid rgba(0,85,164,0.25);
-        color: var(--cmp-blue);
-        font-family: 'Barlow', sans-serif;
-        font-size: 10px;
-        font-weight: 600;
-        padding: 2px 7px;
-        border-radius: 3px;
-        margin: 2px;
-    }
-
-    /* ── Botones de descarga ── */
-    div[data-testid="stDownloadButton"] > button {
-        font-family: 'Barlow Condensed', sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        background-color: var(--cmp-blue) !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        border-radius: 4px !important;
-        padding: 6px 16px !important;
-    }
-    /* ── Dark mode overrides ── */
-    @media (prefers-color-scheme: dark) {
-        h1, h2, h3 { color: #E8650A !important; }
-        .stTabs [aria-selected="true"] { color: #E8650A !important; border-bottom-color: #E8650A !important; }
-    }
-    /* Streamlit dark theme class override */
-    [data-theme="dark"] h1,
-    [data-theme="dark"] h2,
-    [data-theme="dark"] h3 { color: #E8650A !important; }
-    [data-theme="dark"] .stTabs [aria-selected="true"] {
-        color: #E8650A !important;
-        border-bottom-color: #E8650A !important;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+    html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
+    .stApp { background-color: #0f1117; color: #e0e0e0; }
+    h1, h2, h3 { font-family: 'IBM Plex Mono', monospace; color: #f0c040; letter-spacing: -0.5px; }
+    .metric-card { background: #1a1d27; border: 1px solid #2a2d3a; border-left: 3px solid #f0c040;
+                   padding: 12px 16px; border-radius: 4px; margin-bottom: 8px; }
+    .metric-card.red  { border-left-color: #cc4444; }
+    .metric-card.green{ border-left-color: #44aa66; }
+    .metric-card.blue { border-left-color: #6699ff; }
+    .metric-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px;
+                    font-family: 'IBM Plex Mono', monospace; }
+    .metric-value { font-size: 22px; font-weight: 600; color: #f0c040; font-family: 'IBM Plex Mono', monospace; }
+    .metric-value.red  { color: #cc4444; }
+    .metric-value.green{ color: #44aa66; }
+    .metric-value.blue { color: #6699ff; }
+    .metric-sub { font-size: 12px; color: #777; font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
+    .stTabs [data-baseweb="tab"] { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #888; }
+    .stTabs [aria-selected="true"] { color: #f0c040 !important; border-bottom: 2px solid #f0c040 !important; }
+    .cutoff-box { background: #1a1d27; border: 1px solid #2a2d3a; border-left: 3px solid #6699ff;
+                  padding: 10px 14px; border-radius: 4px; font-size: 12px; color: #aaa;
+                  font-family: 'IBM Plex Mono', monospace; margin: 6px 0; }
+    .warn-box { background: #2a1f00; border-left: 3px solid #f0c040; padding: 10px 14px;
+                font-size: 12px; color: #ccc; border-radius: 0 4px 4px 0; margin: 8px 0; }
+    .col-tag { display: inline-block; background: #1e2235; border: 1px solid #2a2d3a; color: #f0c040;
+               font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 6px;
+               border-radius: 2px; margin: 2px; }
+    div[data-testid="stDownloadButton"] > button { font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -651,9 +504,9 @@ with tab1:
 
     def _highlight_rows(row):
         if row['mes'] == 'Total':
-            return ['background-color:#E8ECF1;font-weight:bold;color:#003366'] * len(row)
+            return ['background-color:#1e2235;font-weight:bold'] * len(row)
         elif row['mes'] == mes_abr:
-            return ['background-color:#E8F4EE;font-weight:600;color:#1E7E4A'] * len(row)
+            return ['background-color:#1a2e1a;font-weight:600'] * len(row)
         return [''] * len(row)
 
     st.dataframe(
@@ -684,7 +537,7 @@ with tab1:
 
     def _color_dev(val):
         if pd.isna(val) or val == 0: return ''
-        return 'color:#C0392B;font-weight:600' if val < 0 else 'color:#1E7E4A;font-weight:600'
+        return 'color:#cc4444;font-weight:600' if val < 0 else 'color:#44aa66;font-weight:600'
 
     try:
         styled_desv = desv.style.map(_color_dev, subset=vd)
@@ -1326,7 +1179,6 @@ with tab6:
                 perdida_v  = FN / (TP + FN) * 100 if (TP + FN) > 0 else 0
                 ganancia_v = FP / (TN + FP) * 100 if (TN + FP) > 0 else 0
 
-                # 6 cards en 2 filas de 3
                 r1 = st.columns(3)
                 with r1[0]:
                     st.markdown(_metric_html('Coincidencia Mineral', f'{TP:,}', 'green'), unsafe_allow_html=True)
