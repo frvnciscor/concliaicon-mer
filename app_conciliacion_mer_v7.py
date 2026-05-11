@@ -506,7 +506,7 @@ with tab1:
         if row['mes'] == 'Total':
             return ['background-color:#1e2235;font-weight:bold'] * len(row)
         elif row['mes'] == mes_abr:
-            return ['background-color:#1a2e1a;font-weight:600'] * len(row)
+            return ['font-weight:700;border-left:3px solid #E8650A'] * len(row)
         return [''] * len(row)
 
     st.dataframe(
