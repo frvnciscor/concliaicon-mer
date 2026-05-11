@@ -57,33 +57,226 @@ MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
-    html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
-    .stApp { background-color: #0f1117; color: #e0e0e0; }
-    h1, h2, h3 { font-family: 'IBM Plex Mono', monospace; color: #f0c040; letter-spacing: -0.5px; }
-    .metric-card { background: #1a1d27; border: 1px solid #2a2d3a; border-left: 3px solid #f0c040;
-                   padding: 12px 16px; border-radius: 4px; margin-bottom: 8px; }
-    .metric-card.red  { border-left-color: #cc4444; }
-    .metric-card.green{ border-left-color: #44aa66; }
-    .metric-card.blue { border-left-color: #6699ff; }
-    .metric-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px;
-                    font-family: 'IBM Plex Mono', monospace; }
-    .metric-value { font-size: 22px; font-weight: 600; color: #f0c040; font-family: 'IBM Plex Mono', monospace; }
-    .metric-value.red  { color: #cc4444; }
-    .metric-value.green{ color: #44aa66; }
-    .metric-value.blue { color: #6699ff; }
-    .metric-sub { font-size: 12px; color: #777; font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
-    .stTabs [data-baseweb="tab"] { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #888; }
-    .stTabs [aria-selected="true"] { color: #f0c040 !important; border-bottom: 2px solid #f0c040 !important; }
-    .cutoff-box { background: #1a1d27; border: 1px solid #2a2d3a; border-left: 3px solid #6699ff;
-                  padding: 10px 14px; border-radius: 4px; font-size: 12px; color: #aaa;
-                  font-family: 'IBM Plex Mono', monospace; margin: 6px 0; }
-    .warn-box { background: #2a1f00; border-left: 3px solid #f0c040; padding: 10px 14px;
-                font-size: 12px; color: #ccc; border-radius: 0 4px 4px 0; margin: 8px 0; }
-    .col-tag { display: inline-block; background: #1e2235; border: 1px solid #2a2d3a; color: #f0c040;
-               font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 6px;
-               border-radius: 2px; margin: 2px; }
-    div[data-testid="stDownloadButton"] > button { font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+    /* ── Fuentes CMP ── */
+    @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+
+    /* ── Variables de color CMP ── */
+    :root {
+        --cmp-navy:      #003366;
+        --cmp-blue:      #0055A4;
+        --cmp-blue-mid:  #1A6BBF;
+        --cmp-orange:    #E8650A;
+        --cmp-orange-lt: #F28C3A;
+        --cmp-white:     #FFFFFF;
+        --cmp-gray-1:    #F4F6F9;
+        --cmp-gray-2:    #E8ECF1;
+        --cmp-gray-3:    #C5CDD8;
+        --cmp-gray-4:    #7A8A9C;
+        --cmp-gray-5:    #3D4E5F;
+        --cmp-green:     #1E7E4A;
+        --cmp-red:       #C0392B;
+    }
+
+    /* ── Base ── */
+    html, body, [class*="css"] {
+        font-family: 'Barlow', sans-serif;
+        color: var(--cmp-gray-5);
+    }
+    .stApp {
+        background-color: var(--cmp-gray-1);
+    }
+
+    /* ── Títulos ── */
+    h1 {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 700;
+        font-size: 28px;
+        color: var(--cmp-navy);
+        letter-spacing: 0.5px;
+        border-bottom: 3px solid var(--cmp-orange);
+        padding-bottom: 8px;
+        margin-bottom: 16px;
+    }
+    h2, h3 {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 600;
+        color: var(--cmp-navy);
+        letter-spacing: 0.3px;
+    }
+
+    /* ── Sidebar ── */
+    [data-testid="stSidebar"] {
+        background-color: var(--cmp-navy) !important;
+        border-right: 3px solid var(--cmp-orange);
+    }
+    [data-testid="stSidebar"] * {
+        color: var(--cmp-white) !important;
+    }
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stNumberInput label,
+    [data-testid="stSidebar"] .stTextInput label,
+    [data-testid="stSidebar"] .stRadio label,
+    [data-testid="stSidebar"] .stCheckbox label {
+        color: var(--cmp-gray-3) !important;
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] strong {
+        color: var(--cmp-orange) !important;
+        font-family: 'Barlow Condensed', sans-serif;
+    }
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(255,255,255,0.15) !important;
+    }
+    [data-testid="stSidebar"] .stMarkdown p {
+        color: var(--cmp-gray-3) !important;
+        font-size: 13px;
+    }
+
+    /* ── Tabs ── */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: var(--cmp-white);
+        border-bottom: 2px solid var(--cmp-gray-2);
+        gap: 4px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--cmp-gray-4);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        padding: 10px 20px;
+        border-radius: 4px 4px 0 0;
+    }
+    .stTabs [aria-selected="true"] {
+        color: var(--cmp-navy) !important;
+        border-bottom: 3px solid var(--cmp-orange) !important;
+        background-color: var(--cmp-gray-1) !important;
+    }
+    .stTabs [data-baseweb="tab-panel"] {
+        background-color: var(--cmp-white);
+        border: 1px solid var(--cmp-gray-2);
+        border-top: none;
+        border-radius: 0 0 6px 6px;
+        padding: 20px;
+    }
+
+    /* ── Metric cards ── */
+    .metric-card {
+        background: var(--cmp-white);
+        border: 1px solid var(--cmp-gray-2);
+        border-left: 4px solid var(--cmp-blue);
+        padding: 14px 18px;
+        border-radius: 0 6px 6px 0;
+        margin-bottom: 10px;
+        box-shadow: 0 1px 4px rgba(0,51,102,0.07);
+    }
+    .metric-card.red   { border-left-color: var(--cmp-red); }
+    .metric-card.green { border-left-color: var(--cmp-green); }
+    .metric-card.blue  { border-left-color: var(--cmp-blue-mid); }
+    .metric-card.orange{ border-left-color: var(--cmp-orange); }
+
+    .metric-label {
+        font-size: 10px;
+        color: var(--cmp-gray-4);
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        font-weight: 600;
+        font-family: 'Barlow', sans-serif;
+        margin-bottom: 4px;
+    }
+    .metric-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--cmp-navy);
+        font-family: 'Barlow Condensed', sans-serif;
+        line-height: 1.1;
+    }
+    .metric-value.red   { color: var(--cmp-red); }
+    .metric-value.green { color: var(--cmp-green); }
+    .metric-value.blue  { color: var(--cmp-blue-mid); }
+    .metric-value.orange{ color: var(--cmp-orange); }
+
+    .metric-sub {
+        font-size: 11px;
+        color: var(--cmp-gray-4);
+        font-family: 'Barlow', sans-serif;
+        margin-top: 3px;
+    }
+
+    /* ── Cutoff box ── */
+    .cutoff-box {
+        background: var(--cmp-gray-1);
+        border: 1px solid var(--cmp-gray-2);
+        border-left: 4px solid var(--cmp-blue-mid);
+        padding: 10px 14px;
+        border-radius: 0 4px 4px 0;
+        font-size: 12px;
+        color: var(--cmp-gray-5);
+        font-family: 'Barlow', sans-serif;
+        margin: 6px 0;
+    }
+
+    /* ── Warn box ── */
+    .warn-box {
+        background: #FFF8F0;
+        border-left: 4px solid var(--cmp-orange);
+        padding: 12px 16px;
+        font-size: 13px;
+        color: var(--cmp-gray-5);
+        border-radius: 0 6px 6px 0;
+        margin: 8px 0;
+    }
+
+    /* ── Col tags ── */
+    .col-tag {
+        display: inline-block;
+        background: var(--cmp-gray-2);
+        border: 1px solid var(--cmp-gray-3);
+        color: var(--cmp-navy);
+        font-family: 'Barlow', sans-serif;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 3px;
+        margin: 2px;
+    }
+
+    /* ── Botones de descarga ── */
+    div[data-testid="stDownloadButton"] > button {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        background-color: var(--cmp-blue) !important;
+        color: var(--cmp-white) !important;
+        border: none !important;
+        border-radius: 4px !important;
+        padding: 6px 16px !important;
+    }
+    div[data-testid="stDownloadButton"] > button:hover {
+        background-color: var(--cmp-navy) !important;
+    }
+
+    /* ── Radio y selectbox ── */
+    .stRadio label, .stSelectbox label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--cmp-gray-5);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* ── Dataframes ── */
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--cmp-gray-2);
+        border-radius: 6px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -504,9 +697,9 @@ with tab1:
 
     def _highlight_rows(row):
         if row['mes'] == 'Total':
-            return ['background-color:#1e2235;font-weight:bold'] * len(row)
+            return ['background-color:#E8ECF1;font-weight:bold;color:#003366'] * len(row)
         elif row['mes'] == mes_abr:
-            return ['background-color:#1a2e1a;font-weight:600'] * len(row)
+            return ['background-color:#E8F4EE;font-weight:600;color:#1E7E4A'] * len(row)
         return [''] * len(row)
 
     st.dataframe(
@@ -537,7 +730,7 @@ with tab1:
 
     def _color_dev(val):
         if pd.isna(val) or val == 0: return ''
-        return 'color:#cc4444;font-weight:600' if val < 0 else 'color:#44aa66;font-weight:600'
+        return 'color:#C0392B;font-weight:600' if val < 0 else 'color:#1E7E4A;font-weight:600'
 
     try:
         styled_desv = desv.style.map(_color_dev, subset=vd)
