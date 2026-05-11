@@ -218,8 +218,18 @@ st.markdown("""
         border-radius: 4px !important;
         padding: 6px 16px !important;
     }
-    div[data-testid="stDownloadButton"] > button:hover {
-        background-color: var(--cmp-navy) !important;
+    /* ── Dark mode overrides ── */
+    @media (prefers-color-scheme: dark) {
+        h1, h2, h3 { color: #E8650A !important; }
+        .stTabs [aria-selected="true"] { color: #E8650A !important; border-bottom-color: #E8650A !important; }
+    }
+    /* Streamlit dark theme class override */
+    [data-theme="dark"] h1,
+    [data-theme="dark"] h2,
+    [data-theme="dark"] h3 { color: #E8650A !important; }
+    [data-theme="dark"] .stTabs [aria-selected="true"] {
+        color: #E8650A !important;
+        border-bottom-color: #E8650A !important;
     }
 </style>
 """, unsafe_allow_html=True)
