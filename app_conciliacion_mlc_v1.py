@@ -115,37 +115,37 @@ COLS_SUFIJO = [
 
 
 def leer_csv_mlc(uploaded_file):
-    """Lectura CSV formato Vulcan. Optimizado: usecols por nombre + float32 + category."""
+    """Lectura CSV formato Vulcan (4 filas cabecera). Elimina BOM UTF-8."""
     try:
-        # Leer fila de encabezado para obtener nombres de columnas
-        header_df = pd.read_csv(uploaded_file, nrows=1, header=None, encoding='latin1')
-        uploaded_file.seek(0)
+        # Leer bytes y eliminar BOM si existe
+        raw = uploaded_file.read()
+        if raw[:3] == b'\xef\xbb\xbf':   # UTF-8 BOM
+            raw = raw[3:]
+        buf = io.BytesIO(raw)
+
+        # Leer encabezado (fila 1 = nombres de columnas)
+        header_df = pd.read_csv(buf, nrows=1, header=None, encoding='utf-8')
+        buf.seek(0)
         col_names = [str(c).strip().lower() for c in header_df.iloc[0].tolist()]
 
-        # Columnas a leer: intersección con las disponibles
-        cols_usar  = [c for c in COLS_BASE if c in col_names]
-        dtype_map  = {c: 'float32' for c in COLS_F32 if c in cols_usar}
+        cols_usar = [c for c in COLS_BASE if c in col_names]
+        dtype_map = {c: 'float32' for c in COLS_F32 if c in cols_usar}
 
-        try:
-            # skiprows=4, usar nombres directamente con header=None
-            df = pd.read_csv(
-                uploaded_file, skiprows=4, header=None,
-                names=col_names,          # nombres de todas las columnas
-                usecols=cols_usar,        # leer solo las necesarias (por nombre)
-                dtype=dtype_map,
-                low_memory=False, encoding='latin1'
-            )
-        except Exception:
-            uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, low_memory=False, encoding='latin1')
-            df.columns = [str(c).strip().lower() for c in df.columns]
-            df = df[[c for c in COLS_BASE if c in df.columns]]
+        df = pd.read_csv(
+            buf, skiprows=4, header=None,
+            names=col_names, usecols=cols_usar,
+            dtype=dtype_map, low_memory=False, encoding='utf-8'
+        )
 
         if 'densidad' in df.columns:
-            df['densidad'] = df['densidad'].replace(-99.0, 2.7).astype('float32')
+            df['densidad'] = pd.to_numeric(df['densidad'], errors='coerce').fillna(2.7)
+            df.loc[df['densidad'] == -99, 'densidad'] = 2.7
+            df['densidad'] = df['densidad'].astype('float32')
+
         for c in COLS_CAT:
             if c in df.columns:
-                df[c] = df[c].astype('category')
+                df[c] = df[c].astype(str).str.strip().str.lower().astype('category')
+
         return df, []
     except Exception as e:
         return None, [str(e)]
@@ -191,7 +191,12 @@ def cargar_datos_mlc(lp_files_bytes, mp_files_bytes, cp_files_bytes,
     # Merge liviano: solo columnas útiles con sufijo
     def _preparar_sufijo(df_src, suf):
         if 'id' not in df_src.columns:
-            raise ValueError(f"Columna 'id' no encontrada. Verifica que los archivos tengan 'block_id'.")
+            cols_disponibles = list(df_src.columns[:20])
+            raise ValueError(
+                f"Columna 'id' no encontrada en archivos {suf.strip('_').upper()}. "
+                f"Columnas disponibles: {cols_disponibles}. "
+                f"Verifica que los archivos tengan 'block_id'."
+            )
         cols_disp = [c for c in COLS_SUFIJO if c in df_src.columns]
         rename_map = {c: f"{c}{suf}" for c in cols_disp}
         return df_src[['id'] + cols_disp].rename(columns=rename_map)
