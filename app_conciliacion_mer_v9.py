@@ -286,18 +286,6 @@ with st.sidebar:
                                    format_func=lambda v: v.upper())
     st.markdown("---")
 
-    st.markdown("### 🎨 Paleta de colores — Barras")
-    st.markdown("<div class='cutoff-box'>Defaults = colores originales del notebook.</div>",
-                unsafe_allow_html=True)
-    col_lp = st.color_picker("LP (barra)", "#D3D3D3")   # lightgray original
-    col_mp = st.color_picker("MP (barra)", "#696969")   # dimgray original
-    col_cp = st.color_picker("CP (barra)", "#000000")   # black original
-
-    st.markdown("### 🎨 Paleta de colores — Líneas")
-    col_lp_line = st.color_picker("LP (línea)", "#008000")   # green original
-    col_mp_line = st.color_picker("MP (línea)", "#9370DB")   # purple original
-    col_cp_line = st.color_picker("CP (línea)", "#4682B4")   # steelblue original
-
     st.markdown("---")
 
     st.markdown("### 🎯 Objetivo anual")
@@ -587,6 +575,19 @@ with tab2:
         ley_ymax = st.number_input("Ley máx (%)",  value=70.0, step=1.0, key="ley_ymax")
 
     show_annot = st.checkbox("Mostrar etiquetas en barras", value=True, key="show_annot")
+
+    with st.expander("🎨 Paleta de colores — Barras y Líneas"):
+        st.markdown("*Defaults = colores originales del notebook Jupyter*")
+        _pc1, _pc2, _pc3 = st.columns(3)
+        with _pc1:
+            col_lp      = st.color_picker("LP (barra)",  "#D3D3D3", key="c_lp_bar")
+            col_lp_line = st.color_picker("LP (línea)",  "#008000", key="c_lp_line")
+        with _pc2:
+            col_mp      = st.color_picker("MP (barra)",  "#696969", key="c_mp_bar")
+            col_mp_line = st.color_picker("MP (línea)",  "#9370DB", key="c_mp_line")
+        with _pc3:
+            col_cp      = st.color_picker("CP (barra)",  "#000000", key="c_cp_bar")
+            col_cp_line = st.color_picker("CP (línea)",  "#4682B4", key="c_cp_line")
 
     st.markdown(f"### Extracción Mensual — LP o MP vs CP  ·  {var_cal.upper()}")
     modelo_sel = st.radio("Comparar CP contra:", ["LP", "MP"], horizontal=True, key="r_mensual")
@@ -940,22 +941,26 @@ with tab4:
                 text=[f"{v:,.1f}" for v in vals],
                 textposition="outside",
                 y=vals,
-                connector={"line":{"color":"#ccc"}},
-                increasing={"marker":{"color":col_cp}},
-                decreasing={"marker":{"color":"#cc4444"}},
-                totals={"marker":{"color":col_lp}}
+                connector={"line":{"color":"rgba(63,63,63,0.5)"}},
             ))
             fw.update_layout(
-                title=dict(text=title, font=dict(size=14,color='#222',family='Calibri'), x=0.5),
-                paper_bgcolor='white', plot_bgcolor='white',
-                font=dict(color='#333',family='Calibri',size=12),
-                height=420, margin=dict(t=60,b=60,l=60,r=30)
+                title=dict(
+                    text=f"<b>{title}</b>",
+                    font=dict(size=18, color='#222'),
+                    x=0.0, xanchor='left'
+                ),
+                paper_bgcolor='white',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#333', size=13),
+                height=420,
+                margin=dict(t=70, b=60, l=60, r=30)
             )
-            fw.update_yaxes(title_text="Tonelaje (kt)",
-                            title_font=dict(family='Calibri',size=12,color='#444'),
-                            gridcolor='#eee', zerolinecolor='#ccc',
-                            tickfont=dict(color='#444',family='Calibri'))
-            fw.update_xaxes(tickfont=dict(color='#444',family='Calibri'))
+            fw.update_yaxes(
+                title_text="Tonelaje (kt)",
+                tickformat=",d",
+                gridcolor='#eee',
+                zerolinecolor='#ccc'
+            )
             return fw, df_res
 
         df_lp_c = df[df['extraccion'] > 0].copy()
