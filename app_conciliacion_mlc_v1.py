@@ -87,21 +87,61 @@ st.markdown("""
 # FUNCIONES AUXILIARES
 # ─────────────────────────────────────────────
 
+# Columnas necesarias (usecols) — incluye las solicitadas
+COLS_BASE = [
+    'block_id', 'fase', 'ocurrencia',
+    'centroid_x', 'centroid_y', 'centroid_z',
+    'dim_x', 'dim_y', 'dim_z',
+    'proportional_volume', 'densidad',
+    'ue_fe', 'fe', 'fem', 'fedtt', 'dtt', 'p', 's',
+    'sio2', 'al2o3', 'v', 'axb', 'bwi_cab', 'bwi_conc',
+    'extraccion',
+]
+COLS_F32 = [
+    'centroid_x', 'centroid_y', 'centroid_z',
+    'dim_x', 'dim_y', 'dim_z', 'proportional_volume', 'densidad',
+    'ue_fe', 'fe', 'fem', 'fedtt', 'dtt', 'p', 's',
+    'sio2', 'al2o3', 'v', 'axb', 'bwi_cab', 'bwi_conc',
+]
+COLS_CAT = ['fase', 'ocurrencia']
+COLS_SUFIJO = [
+    'fe', 'fem', 'fedtt', 'dtt', 'p', 's',
+    'sio2', 'al2o3', 'v', 'axb', 'bwi_cab', 'bwi_conc',
+    'densidad', 'proportional_volume',
+    'ue_fe', 'ocurrencia', 'fase',
+    'centroid_x', 'centroid_y', 'centroid_z',
+    'dim_x', 'dim_y', 'dim_z',
+]
+
+
 def leer_csv_mlc(uploaded_file):
-    """Lectura CSV formato Vulcan (4 líneas cabecera)."""
+    """Lectura CSV formato Vulcan. Optimizado: usecols + float32 + category."""
     try:
+        header_df = pd.read_csv(uploaded_file, nrows=1, header=None, encoding='latin1')
+        uploaded_file.seek(0)
+        col_names = [str(c).strip().lower() for c in header_df.iloc[0].tolist()]
+
+        cols_usar = [c for c in COLS_BASE if c in col_names]
+        col_idx   = [col_names.index(c) for c in cols_usar]
+        dtype_map = {c: 'float32' for c in COLS_F32 if c in cols_usar}
+
         try:
-            header_df = pd.read_csv(uploaded_file, nrows=1, header=None)
-            uploaded_file.seek(0)
-            col_names = header_df.iloc[0].tolist()
-            df = pd.read_csv(uploaded_file, skiprows=4, header=None,
-                             names=col_names, low_memory=False, encoding='latin1')
+            df = pd.read_csv(
+                uploaded_file, skiprows=4, header=None,
+                names=col_names, usecols=col_idx,
+                dtype=dtype_map, low_memory=False, encoding='latin1'
+            )
         except Exception:
             uploaded_file.seek(0)
             df = pd.read_csv(uploaded_file, low_memory=False, encoding='latin1')
-        df.columns = [str(c).strip().lower() for c in df.columns]
+            df.columns = [str(c).strip().lower() for c in df.columns]
+            df = df[[c for c in COLS_BASE if c in df.columns]]
+
         if 'densidad' in df.columns:
-            df.loc[df['densidad'] == -99, 'densidad'] = 2.7
+            df['densidad'] = df['densidad'].replace(-99.0, 2.7).astype('float32')
+        for c in COLS_CAT:
+            if c in df.columns:
+                df[c] = df[c].astype('category')
         return df, []
     except Exception as e:
         return None, [str(e)]
@@ -114,135 +154,10 @@ def ponderado(df, col_ley, col_ton):
     return (df_v[col_ley] * df_v[col_ton]).sum() / total
 
 
-def clasificar_ore_mlc(ue_fe, fem, cutoff_fem):
-    """MLC: ue_fe >= 1 AND fem >= cutoff → mineral; ue_fe >= 1 AND fem < cutoff → marginal"""
-    if pd.isna(ue_fe) or pd.isna(fem): return 'esteril'
-    if ue_fe >= 1 and fem >= cutoff_fem: return 'mineral'
-    if ue_fe >= 1 and fem < cutoff_fem:  return 'marginal'
-    return 'esteril'
-
-
-def conciliacion_fn(a, b): return f"{a}_{b}"
-
-
-def make_fig(figsize=(14, 5)):
-    fig, ax = plt.subplots(figsize=figsize, facecolor='white')
-    ax.set_facecolor('white'); return fig, ax
-
-
-def style_ax(ax):
-    for sp in ['top','right']: ax.spines[sp].set_visible(False)
-    for sp in ['bottom','left']: ax.spines[sp].set_color('#cccccc')
-    ax.tick_params(colors='#444444')
-    ax.xaxis.label.set_color('#444444'); ax.yaxis.label.set_color('#444444')
-
-
-def save_png(fig, dpi=150):
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
-    buf.seek(0); return buf.getvalue()
-
-
-def plotly_to_html(fig):
-    return fig.to_html(include_plotlyjs='cdn', full_html=True).encode('utf-8')
-
-
-def csv_bytes(df):
-    return df.to_csv(index=False).encode('utf-8-sig')
-
-
-def annotate_bars(ax, bars, val_series, fmt='{h:.1f}\n{v:.1f}%'):
-    for i, bar in enumerate(bars):
-        h = bar.get_height()
-        if pd.isna(h) or h == 0: continue
-        try:
-            v = val_series.iloc[i]
-            ax.annotate(fmt.format(h=h, v=v),
-                        xy=(bar.get_x() + bar.get_width()/2, h),
-                        xytext=(0,3), textcoords='offset points',
-                        fontsize=7, ha='center', va='bottom', color='#333')
-        except Exception: pass
-
-
-def _metric_html(label, value, cls=''):
-    return (f"<div class='metric-card {cls}'>"
-            f"<div class='metric-label'>{label}</div>"
-            f"<div class='metric-value {cls}'>{value}</div></div>")
-
-
-# ─────────────────────────────────────────────
-# SIDEBAR
-# ─────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## ⛏️ MLC · Conciliación")
-    st.markdown("---")
-
-    st.markdown("### 📂 Archivos CSV")
-    st.markdown("*MLC: 12 LP + 12 MP + 12 CP (uno por mes)*")
-    files_lp = st.file_uploader("Modelos LP (output_lp_1 … output_lp_12)",
-                                type="csv", accept_multiple_files=True, key="lp")
-    files_mp = st.file_uploader("Modelos MP (output_mp_1 … output_mp_12)",
-                                type="csv", accept_multiple_files=True, key="mp")
-    files_cp = st.file_uploader("Modelos CP (output_cp_1 … output_cp_12)",
-                                type="csv", accept_multiple_files=True, key="cp")
-    st.markdown("---")
-
-    # ── MODO DE ANÁLISIS ──
-    st.markdown("### 🔬 Modo de análisis")
-    modo_fase = st.radio("Tipo de análisis:", ["Análisis completo", "Por fase"],
-                         horizontal=False, key="modo_fase")
-    fase_sel = None
-    if modo_fase == "Por fase":
-        fase_sel = st.selectbox("Fase MLC:", FASES_MLC, index=0, key="fase_sel",
-                                format_func=str.upper)
-        st.markdown(f"<div class='fase-box'>✅ Filtrando por Fase {fase_sel.upper()}</div>",
-                    unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='fase-box'>🌐 Análisis global (todas las fases)</div>",
-                    unsafe_allow_html=True)
-
-    st.markdown("### 🔍 Filtro por Ocurrencia")
-    modo_ocu = st.radio("Análisis por ocurrencia:", ["Completo", "Por ocurrencia"],
-                        horizontal=False, key="modo_ocu")
-    ocu_sel = None
-    if modo_ocu == "Por ocurrencia":
-        ocu_sel = st.selectbox("Ocurrencia:", ['mac', 'bre', 'gyd'],
-                               format_func=str.upper, key="ocu_sel")
-        st.markdown(f"<div class='fase-box'>✅ Filtrando por Ocurrencia {ocu_sel.upper()}</div>",
-                    unsafe_allow_html=True)
-    st.markdown("---")
-
-    st.markdown("### 📅 Período")
-    ca_p, cb_p = st.columns(2)
-    with ca_p: anio = st.number_input("Año", value=2026, step=1, min_value=2000, max_value=2100)
-    with cb_p: mes  = st.selectbox("Mes", options=list(MESES.keys()),
-                                    format_func=lambda x: MESES[x], index=0)
-    st.markdown("---")
-
-    st.markdown("### ✂️ Ley de Corte")
-    st.markdown("<div class='cutoff-box'>MLC: ue_fe ≥ 1 AND fem ≥ 28%<br>"
-                "Marginal: ue_fe ≥ 1 AND fem &lt; 28%</div>", unsafe_allow_html=True)
-    cutoff_fem_lc = st.number_input("Corte FeM (%)", value=28.0, step=0.5, key="lc_fem")
-    cutoff_str = f"FeM ≥ {cutoff_fem_lc}%"
-    st.markdown(f"<div class='cutoff-box'>🎯 {cutoff_str}</div>", unsafe_allow_html=True)
-    st.markdown("---")
-
-    st.markdown("### 📐 Variable de calidad")
-    var_cal = st.selectbox("Eje secundario (gráficos)", VARS_CALIDAD,
-                           format_func=lambda v: v.upper())
-    st.markdown("---")
-    st.markdown("### 🎯 Objetivo anual")
-    target_ton = st.number_input("Tonelaje objetivo (kt)", value=0, step=100, min_value=0)
-    st.markdown("---")
-
-
-# ─────────────────────────────────────────────
-# CARGA DE DATOS
-# ─────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def cargar_datos_mlc(lp_files_bytes, mp_files_bytes, cp_files_bytes,
                      modo_fase_key, fase_key, cutoff_fem):
-    def _leer_grupo(files_bytes, nombre_tipo):
+    def _leer_grupo(files_bytes):
         df_out = pd.DataFrame()
         for name, content in files_bytes:
             dt, _ = leer_csv_mlc(io.BytesIO(content))
@@ -251,52 +166,65 @@ def cargar_datos_mlc(lp_files_bytes, mp_files_bytes, cp_files_bytes,
                 num = int(''.join(filter(str.isdigit, name.replace('.csv','').split('_')[-1])))
             except Exception:
                 num = 1
-            dt['periodo'] = num
+            dt['periodo'] = np.int16(num)
             dt['archivo'] = name
             if 'block_id' in dt.columns:
                 dt['id'] = dt['block_id'].astype(str) + "_" + dt['periodo'].astype(str)
             df_out = pd.concat([df_out, dt], ignore_index=True)
         return df_out
 
-    df_lp = _leer_grupo(lp_files_bytes, 'lp')
-    df_mp = _leer_grupo(mp_files_bytes, 'mp')
-    df_cp = _leer_grupo(cp_files_bytes, 'cp')
+    df_lp = _leer_grupo(lp_files_bytes)
+    df_mp = _leer_grupo(mp_files_bytes)
+    df_cp = _leer_grupo(cp_files_bytes)
 
-    # Filtrado por fase
     if modo_fase_key == "Por fase" and fase_key:
         for d in [df_lp, df_mp, df_cp]:
             if 'fase' in d.columns:
-                d.drop(d[d['fase'] != fase_key].index, inplace=True)
+                d.drop(d[d['fase'].astype(str) != fase_key].index, inplace=True)
 
-    # Merge estilo notebook: add_suffix en MP y CP, luego merge por 'id'
     if df_lp.empty: return pd.DataFrame(), pd.DataFrame()
 
-    df_mp_ren = df_mp.add_suffix('_mp'); df_mp_ren['id'] = df_mp['id']
-    df_cp_ren = df_cp.add_suffix('_cp'); df_cp_ren['id'] = df_cp['id']
+    # Merge liviano: solo columnas útiles con sufijo
+    def _preparar_sufijo(df_src, suf):
+        cols_disp = [c for c in COLS_SUFIJO if c in df_src.columns]
+        rename_map = {c: f"{c}{suf}" for c in cols_disp}
+        return df_src[['id'] + cols_disp].rename(columns=rename_map)
+
+    df_mp_ren = _preparar_sufijo(df_mp, '_mp')
+    df_cp_ren = _preparar_sufijo(df_cp, '_cp')
 
     df = df_lp.merge(df_mp_ren, on='id', how='outer')
     df = df.merge(df_cp_ren, on='id', how='outer')
+    del df_mp_ren, df_cp_ren
 
-    # Tonelajes
+    # Tonelajes float32
     if 'densidad' in df.columns and 'proportional_volume' in df.columns:
-        df['tonelaje'] = df['densidad'] * df['proportional_volume']
+        df['tonelaje'] = (df['densidad'] * df['proportional_volume']).astype('float32')
+    pv = 'proportional_volume_mp' if 'proportional_volume_mp' in df.columns else 'proportional_volume'
     if 'densidad_mp' in df.columns:
-        df['tonelaje_mp'] = df['densidad_mp'] * df['proportional_volume']
+        df['tonelaje_mp'] = (df['densidad_mp'] * df[pv]).astype('float32')
+    pv2 = 'proportional_volume_cp' if 'proportional_volume_cp' in df.columns else 'proportional_volume'
     if 'densidad_cp' in df.columns:
-        df['tonelaje_cp'] = df['densidad_cp'] * df['proportional_volume']
+        df['tonelaje_cp'] = (df['densidad_cp'] * df[pv2]).astype('float32')
 
-    # Clasificación ore
-    df['ore_lp'] = df.apply(lambda r: clasificar_ore_mlc(
-        r.get('ue_fe', 0), r.get('fem', np.nan), cutoff_fem), axis=1)
-    df['ore_mp'] = df.apply(lambda r: clasificar_ore_mlc(
-        r.get('ue_fe_mp', 0), r.get('fem_mp', np.nan), cutoff_fem), axis=1)
-    df['ore_cp'] = df.apply(lambda r: clasificar_ore_mlc(
-        r.get('ue_fe_cp', 0), r.get('fem_cp', np.nan), cutoff_fem), axis=1)
+    # Clasificación ore vectorizada
+    def _ore_vec(ue_col, fem_col):
+        ue  = pd.to_numeric(df.get(ue_col,  pd.Series(0,       index=df.index)), errors='coerce').fillna(0)
+        fem = pd.to_numeric(df.get(fem_col, pd.Series(np.nan,  index=df.index)), errors='coerce')
+        ore = pd.Series('esteril', index=df.index, dtype=object)
+        ore[ue >= 1] = 'marginal'
+        ore[(ue >= 1) & (fem >= cutoff_fem)] = 'mineral'
+        return ore.astype('category')
 
-    df['conciliacion']    = df.apply(lambda r: conciliacion_fn(r['ore_mp'], r['ore_cp']), axis=1)
-    df['conciliacion_lp'] = df.apply(lambda r: conciliacion_fn(r['ore_lp'], r['ore_cp']), axis=1)
+    df['ore_lp'] = _ore_vec('ue_fe',    'fem')
+    df['ore_mp'] = _ore_vec('ue_fe_mp', 'fem_mp')
+    df['ore_cp'] = _ore_vec('ue_fe_cp', 'fem_cp')
+
+    df['conciliacion']    = (df['ore_mp'].astype(str) + '_' + df['ore_cp'].astype(str)).astype('category')
+    df['conciliacion_lp'] = (df['ore_lp'].astype(str) + '_' + df['ore_cp'].astype(str)).astype('category')
 
     return df, df_mp
+
 
 
 st.markdown("# Conciliación Mensual · Mina Los Colorados")
