@@ -226,8 +226,69 @@ def cargar_datos_mlc(lp_files_bytes, mp_files_bytes, cp_files_bytes,
     return df, df_mp
 
 
+# ─────────────────────────────────────────────
+# SIDEBAR
+# ─────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## ⛏️ MLC · Conciliación")
+    st.markdown("---")
 
-st.markdown("# Conciliación Mensual · Mina Los Colorados")
+    st.markdown("### 📂 Archivos CSV")
+    st.markdown("*MLC: 12 LP + 12 MP + 12 CP (uno por mes)*")
+    files_lp = st.file_uploader("Modelos LP (output_lp_1 … output_lp_12)",
+                                type="csv", accept_multiple_files=True, key="lp")
+    files_mp = st.file_uploader("Modelos MP (output_mp_1 … output_mp_12)",
+                                type="csv", accept_multiple_files=True, key="mp")
+    files_cp = st.file_uploader("Modelos CP (output_cp_1 … output_cp_12)",
+                                type="csv", accept_multiple_files=True, key="cp")
+    st.markdown("---")
+
+    st.markdown("### 🔬 Modo de análisis")
+    modo_fase = st.radio("Tipo de análisis:", ["Análisis completo", "Por fase"],
+                         horizontal=False, key="modo_fase")
+    fase_sel = None
+    if modo_fase == "Por fase":
+        fase_sel = st.selectbox("Fase MLC:", FASES_MLC, index=0, key="fase_sel",
+                                format_func=str.upper)
+        st.markdown(f"<div class='fase-box'>✅ Filtrando por Fase {fase_sel.upper()}</div>",
+                    unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='fase-box'>🌐 Análisis global (todas las fases)</div>",
+                    unsafe_allow_html=True)
+
+    st.markdown("### 🔍 Filtro por Ocurrencia")
+    modo_ocu = st.radio("Análisis por ocurrencia:", ["Completo", "Por ocurrencia"],
+                        horizontal=False, key="modo_ocu")
+    ocu_sel = None
+    if modo_ocu == "Por ocurrencia":
+        ocu_sel = st.selectbox("Ocurrencia:", ['mac', 'bre', 'gyd'],
+                               format_func=str.upper, key="ocu_sel")
+        st.markdown(f"<div class='fase-box'>✅ Filtrando por Ocurrencia {ocu_sel.upper()}</div>",
+                    unsafe_allow_html=True)
+    st.markdown("---")
+
+    st.markdown("### 📅 Período")
+    ca_p, cb_p = st.columns(2)
+    with ca_p: anio = st.number_input("Año", value=2026, step=1, min_value=2000, max_value=2100)
+    with cb_p: mes  = st.selectbox("Mes", options=list(MESES.keys()),
+                                    format_func=lambda x: MESES[x], index=0)
+    st.markdown("---")
+
+    st.markdown("### ✂️ Ley de Corte")
+    st.markdown("<div class='cutoff-box'>MLC: ue_fe ≥ 1 AND fem ≥ 28%<br>"
+                "Marginal: ue_fe ≥ 1 AND fem &lt; 28%</div>", unsafe_allow_html=True)
+    cutoff_fem_lc = st.number_input("Corte FeM (%)", value=28.0, step=0.5, key="lc_fem")
+    cutoff_str = f"FeM ≥ {cutoff_fem_lc}%"
+    st.markdown(f"<div class='cutoff-box'>🎯 {cutoff_str}</div>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    st.markdown("### 📐 Variable de calidad")
+    var_cal = st.selectbox("Eje secundario (gráficos)", VARS_CALIDAD,
+                           format_func=lambda v: v.upper())
+    st.markdown("---")
+    st.markdown("### 🎯 Objetivo anual")
+    target_ton = st.number_input("Tonelaje objetivo (kt)", value=0, step=100, min_value=0)
+    st.markdown("---")
 
 if not files_lp or not files_mp or not files_cp:
     st.markdown("<div class='warn-box'>⚠️ Carga los archivos LP, MP y CP (12 por cada modelo) "
