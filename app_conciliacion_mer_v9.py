@@ -941,7 +941,7 @@ with tab4:
                 text=[f"{v:,.1f}" for v in vals],
                 textposition="outside",
                 y=vals,
-                increasing={"marker": {"color": "#2196F3"}},
+                increasing={"marker": {"color": "#43A047"}},
                 decreasing={"marker": {"color": "#EF5350"}},
                 totals={"marker":     {"color": "#42A5F5"}},
                 connector={"line": {"color": "#999", "width": 1}},
