@@ -134,25 +134,28 @@ def ponderado(df, col_ley, col_ton):
     return (df_v[col_ley] * df_v[col_ton]).sum() / total
 
 
-def clasificar_ore_cnn(row, sufijo=''):
+def clasificar_ore_cnn(row, criterios, sufijo=''):
     """
-    Clasificación CNN:
-      mineral:  ue_fe == 1 AND fem >= 22 AND fe_dtt >= 65.5
-      marginal: ue_fe == 1 AND (fem < 22 OR fe_dtt < 65.5)
-      esteril:  resto
+    Clasificación CNN con criterios dinámicos:
+      mineral:  ue_fe == 1 AND todos los criterios se cumplen
+      marginal: ue_fe == 1 AND algún criterio no se cumple
+      esteril:  ue_fe != 1
     """
-    ue  = row.get(f'ue_fe{sufijo}', 0)
-    fem = row.get(f'fem{sufijo}', np.nan)
-    dtt = row.get(f'fe_dtt{sufijo}', np.nan)
-    if pd.isna(ue):  ue  = 0
-    if pd.isna(fem): fem = 0
-    if pd.isna(dtt): dtt = 0
-    if ue == 1 and fem >= 22 and dtt >= 65.5:
-        return 'mineral'
-    elif ue == 1 and (fem < 22 or dtt < 65.5):
-        return 'marginal'
-    else:
+    ue = row.get(f'ue_fe{sufijo}', 0)
+    if pd.isna(ue): ue = 0
+    if ue != 1:
         return 'esteril'
+    # Evaluar criterios
+    for c in criterios:
+        val = row.get(f"{c['var']}{sufijo}", np.nan)
+        if pd.isna(val):
+            return 'marginal'
+        op = c['op']
+        if   op == '>=' and not (val >= c['val']): return 'marginal'
+        elif op == '<=' and not (val <= c['val']): return 'marginal'
+        elif op == '>'  and not (val >  c['val']): return 'marginal'
+        elif op == '<'  and not (val <  c['val']): return 'marginal'
+    return 'mineral'
 
 
 def conciliacion_fn(a, b):
@@ -260,13 +263,44 @@ with st.sidebar:
     st.markdown("---")
 
     st.markdown("### ✂️ Ley de Corte")
-    st.markdown("<div class='cutoff-box'>CNN: ue_fe == 1 AND fem ≥ 22 AND fe_dtt ≥ 65.5<br>"
-                "Marginal: ue_fe == 1 AND (fem &lt; 22 OR fe_dtt &lt; 65.5)</div>",
+    st.markdown("<div class='cutoff-box'>CNN base: ue_fe == 1 AND fem ≥ 22 AND fe_dtt ≥ 65.5<br>"
+                "Marginal: ue_fe == 1 AND por debajo del corte</div>",
                 unsafe_allow_html=True)
-    cutoff_fem_lc = st.number_input("Corte FeM (%)",  value=22.0, step=0.5, key="lc_fem")
-    cutoff_dtt_lc = st.number_input("Corte FeDTT (%)", value=65.5, step=0.5, key="lc_dtt")
-    cutoff_str = f"FeM ≥ {cutoff_fem_lc}% y FeDTT ≥ {cutoff_dtt_lc}%"
-    st.markdown(f"<div class='cutoff-box'>🎯 {cutoff_str}</div>", unsafe_allow_html=True)
+
+    VARS_CORTE_CNN = ["fem", "fe_dtt", "fe", "mag", "al2o3", "p", "s", "sio2", "ue_fe"]
+    OPS = ['>=', '<=', '>', '<']
+    n_criterios = st.number_input("Número de criterios", min_value=1, max_value=4, value=2, step=1)
+    DEFAULTS_CNN = [
+        {'var': 'fem',    'op': '>=', 'val': 22.0},
+        {'var': 'fe_dtt', 'op': '>=', 'val': 65.5},
+        {'var': 'fe',     'op': '>=', 'val': 0.0},
+        {'var': 'mag',    'op': '>=', 'val': 0.0},
+    ]
+    criterios_cnn = []
+    for i in range(int(n_criterios)):
+        d = DEFAULTS_CNN[i] if i < len(DEFAULTS_CNN) else {'var': 'fem', 'op': '>=', 'val': 0.0}
+        st.markdown(f"**Criterio {i+1}**")
+        ca_c, cb_c, cc_c = st.columns([2, 1, 1.5])
+        with ca_c:
+            var = st.selectbox("Var", VARS_CORTE_CNN,
+                               index=VARS_CORTE_CNN.index(d['var'])
+                               if d['var'] in VARS_CORTE_CNN else 0,
+                               key=f"cnn_var_{i}", label_visibility="collapsed")
+        with cb_c:
+            op = st.selectbox("Op", OPS, index=OPS.index(d['op']),
+                              key=f"cnn_op_{i}", label_visibility="collapsed")
+        with cc_c:
+            val = st.number_input("Val", value=d['val'], step=0.5,
+                                  key=f"cnn_val_{i}", label_visibility="collapsed")
+        criterios_cnn.append({'var': var, 'op': op, 'val': val})
+
+    cutoff_str = " AND ".join([f"{c['var']} {c['op']} {c['val']}" for c in criterios_cnn])
+    st.markdown(f"<div class='cutoff-box'>🎯 {cutoff_str}<br>"
+                f"Marginal: ue_fe == 1 y por debajo del corte</div>",
+                unsafe_allow_html=True)
+    # Mantener referencias a fem/dtt para uso en scatter (tomar del primer criterio que coincida)
+    cutoff_fem_lc = next((c['val'] for c in criterios_cnn if c['var'] == 'fem'), 22.0)
+    cutoff_dtt_lc = next((c['val'] for c in criterios_cnn if c['var'] == 'fe_dtt'), 65.5)
     st.markdown("---")
 
     st.markdown("### 📐 Variable de calidad")
@@ -332,8 +366,8 @@ if warn_lp: st.warning(f"⚠️ LP — columnas faltantes: {', '.join(warn_lp)}"
 if warn_cp: st.warning(f"⚠️ CP — columnas faltantes: {', '.join(warn_cp)}")
 
 # ── Clasificación y merge ──
-def _ore_lp_row(row): return clasificar_ore_cnn(row, '')
-def _ore_cp_row(row): return clasificar_ore_cnn(row, '_cp')
+def _ore_lp_row(row): return clasificar_ore_cnn(row, criterios_cnn, '')
+def _ore_cp_row(row): return clasificar_ore_cnn(row, criterios_cnn, '_cp')
 
 df = pd.merge(df_lp, df_cp, on='block_id', how='outer', suffixes=('', '_cp'))
 df['ore_lp']       = df.apply(_ore_lp_row, axis=1)
@@ -525,7 +559,7 @@ with tab2:
     st.markdown("#### ⚙️ Opciones de visualización")
     ca, cb, cc, cd = st.columns(4)
     with ca: ton_ymin = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ton_ymin")
-    with cb: ton_ymax = st.number_input("Ton. máx (kt)", value=700,  step=50,  key="ton_ymax")
+    with cb: ton_ymax = st.number_input("Ton. máx (kt)", value=1500, step=50,  key="ton_ymax")
     with cc: ley_ymin = st.number_input("Ley mín (%)",  value=15.0, step=1.0, key="ley_ymin")
     with cd: ley_ymax = st.number_input("Ley máx (%)",  value=45.0, step=1.0, key="ley_ymax")
 
@@ -1089,157 +1123,132 @@ with tab4:
 # Panel 3: Impacto FeDTT independiente del ore
 # ─────────────────────────────────────────────
 with tab5:
-    st.markdown("### Análisis de Dispersión FeM — 3 paneles CNN")
-    st.markdown("*Todos los paneles usan los mismos bloques base (misma lógica que Ore/Waste).*")
+    st.markdown("### Análisis de Dispersión — Fe y FeDTT")
+    st.markdown("*Bloques con UE_FE = 1. Selector LP o MP vs CP.*")
 
     if df_mp.empty:
         st.info("Carga los archivos MP para el análisis de dispersión.")
     else:
-        periodo_disp = st.radio("Período:", ["Mes", "Acumulado"], horizontal=True, key="periodo_disp")
+        _d1, _d2, _d3 = st.columns(3)
+        with _d1:
+            modelo_disp = st.radio("Modelo vs CP:", ["MP", "LP"],
+                                   horizontal=True, key="modelo_disp")
+        with _d2:
+            periodo_disp = st.radio("Período:", ["Mes", "Acumulado"],
+                                    horizontal=True, key="periodo_disp")
+        with _d3:
+            ue_fe_disp = st.selectbox("UE_FE =", [1, 2, 3], index=0, key="ue_fe_disp")
 
         try:
             arch_d = f'output_mp_{mes}.csv'
+
             if periodo_disp == "Acumulado":
                 df_mp_d = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
-                df_cp_d = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                df_lp_d = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy()
             else:
                 df_mp_d = df_mp[df_mp['ARCHIVO'] == arch_d].drop_duplicates('block_id').copy()
-                df_cp_d = df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
+                df_lp_d = df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
 
-            # Base común: merge con filtro de volumen (igual que matrices)
-            df_mp_d['ore_bin_d'] = df_mp_d['ore_mp'].replace({'marginal':'esteril'})
-            df_cp_d['ore_bin_d'] = df_cp_d['ore_cp'].replace({'marginal':'esteril'})
+            periodo_lbl = f"Ene–{mes_abr}" if periodo_disp == "Acumulado" else mes_abr
 
-            union_d = pd.merge(
-                df_mp_d[['block_id','extraccion','fem','fe_dtt','ore_bin_d',
-                          'proportional_volume','dim_x','dim_y','dim_z']],
-                df_cp_d[['block_id','extraccion','fem','fe_dtt','ore_bin_d']],
-                on=['block_id','extraccion'], suffixes=('_mp','_cp')
-            )
-            union_d = union_d[
-                union_d['proportional_volume'] >= 0.75 *
-                union_d['dim_x'] * union_d['dim_y'] * union_d['dim_z']
-            ].copy()
+            if modelo_disp == "MP":
+                # MP vs CP: merge por block_id entre df_mp y df_cp
+                df_cp_d = df_cp[
+                    (df_cp['extraccion'] <= mes) if periodo_disp == "Acumulado"
+                    else (df_cp['extraccion'] == mes)
+                ].drop_duplicates('block_id').copy()
 
-            # Renombrar fe_dtt
-            if 'fe_dtt_mp' not in union_d.columns and 'fedtt_mp' in union_d.columns:
-                union_d = union_d.rename(columns={'fedtt_mp':'fe_dtt_mp','fedtt_cp':'fe_dtt_cp'})
-
-            df_base = union_d.dropna(subset=['fem_mp','fem_cp']).copy()
-
-            if df_base.empty:
-                st.warning("Sin datos suficientes para el análisis de dispersión.")
+                merged = pd.merge(
+                    df_mp_d[['block_id','extraccion','fe','fe_dtt','ue_fe']],
+                    df_cp_d[['block_id','extraccion','fe','fe_dtt']],
+                    on=['block_id','extraccion'], suffixes=('_mp','_cp')
+                )
+                lbl_modelo = "MP"
             else:
-                periodo_lbl = f"Ene–{mes_abr}" if periodo_disp == "Acumulado" else mes_abr
-                pearson_fem, _ = pearsonr(df_base['fem_cp'], df_base['fem_mp'])
+                # LP vs CP: usar df (merge LP+CP ya hecho)
+                merged = df_lp_d[['block_id','extraccion','fe','fe_dtt','ue_fe',
+                                    'fe_cp','fe_dtt_cp']].copy()
+                merged = merged.rename(columns={
+                    'fe': 'fe_mp', 'fe_dtt': 'fe_dtt_mp',
+                    'fe_cp': 'fe_cp', 'fe_dtt_cp': 'fe_dtt_cp',
+                    'ue_fe': 'ue_fe'
+                })
+                lbl_modelo = "LP"
 
-                # ── Clasificaciones para panel 2 ──
-                ore_mp_col = df_base.get('ore_bin_d_mp', df_base.get('ore_bin_d_x', None))
-                ore_cp_col = df_base.get('ore_bin_d_cp', df_base.get('ore_bin_d_y', None))
-                # Si no existen como columnas separadas, recalcular
-                df_base['ore_mp_disp'] = df_base['ore_bin_d_mp'] if 'ore_bin_d_mp' in df_base.columns else 'esteril'
-                df_base['ore_cp_disp'] = df_base['ore_bin_d_cp'] if 'ore_bin_d_cp' in df_base.columns else 'esteril'
+            # Filtrar por ue_fe == ue_fe_disp
+            if 'ue_fe' in merged.columns:
+                merged = merged[merged['ue_fe'] == ue_fe_disp].copy()
 
-                mineral_mp = (
-                    (df_base['fem_mp'] >= cutoff_fem_lc) &
-                    (df_base['fe_dtt_mp'] >= cutoff_dtt_lc)
-                ) if 'fe_dtt_mp' in df_base.columns else (df_base['fem_mp'] >= cutoff_fem_lc)
+            # Limpiar NaN
+            merged = merged.dropna(subset=['fe_mp','fe_cp']).copy()
 
-                coincidencia = (df_base['ore_mp_disp'] == 'mineral') & (df_base['ore_cp_disp'] == 'mineral')
-                ganancia_ore = (df_base['ore_mp_disp'] == 'esteril') & (df_base['ore_cp_disp'] == 'mineral')
-                perdida_ore  = (df_base['ore_mp_disp'] == 'mineral') & (df_base['ore_cp_disp'] == 'esteril')
-                esteril_ore  = (df_base['ore_mp_disp'] == 'esteril') & (df_base['ore_cp_disp'] == 'esteril')
+            if merged.empty:
+                st.warning(f"Sin datos para UE_FE = {ue_fe_disp} en el período seleccionado.")
+            else:
+                # Calcular Pearson
+                pr_fe, _   = pearsonr(merged['fe_cp'], merged['fe_mp'])
+                has_dtt = ('fe_dtt_mp' in merged.columns and
+                           'fe_dtt_cp' in merged.columns and
+                           merged[['fe_dtt_mp','fe_dtt_cp']].dropna().shape[0] > 3)
+                if has_dtt:
+                    merged_dtt = merged.dropna(subset=['fe_dtt_mp','fe_dtt_cp'])
+                    pr_dtt, _ = pearsonr(merged_dtt['fe_dtt_cp'], merged_dtt['fe_dtt_mp'])
 
-                MAX_FEM = 70
-
-                fig, axs = plt.subplots(1, 3, figsize=(18, 6), facecolor='white',
-                                        sharex=True, sharey=True)
+                n_cols = 2 if has_dtt else 1
+                fig, axs = plt.subplots(1, n_cols,
+                                        figsize=(7*n_cols, 6),
+                                        facecolor='white', squeeze=False)
+                axs = axs[0]
                 for ax in axs: ax.set_facecolor('white')
 
-                def setup_ax(ax, title):
-                    ax.plot([0, MAX_FEM], [0, MAX_FEM], color='gray', lw=1)
-                    ax.axvline(cutoff_fem_lc, ls='--', c='black', lw=1)
-                    ax.axhline(cutoff_fem_lc, ls='--', c='black', lw=1)
-                    ax.set_xlim(0, MAX_FEM); ax.set_ylim(0, MAX_FEM)
-                    ax.set_title(title, color='#222', fontsize=10)
-                    style_ax(ax)
+                # Panel 1: Fe MP vs Fe CP
+                ax_fe = axs[0]
+                max_fe = max(merged['fe_cp'].max(), merged['fe_mp'].max()) * 1.05
+                sl, ic, *_ = linregress(merged['fe_cp'], merged['fe_mp'])
+                xf = np.linspace(0, max_fe, 100)
+                ax_fe.scatter(merged['fe_cp'], merged['fe_mp'],
+                              s=12, color='#4472C4', alpha=0.5, edgecolors='none')
+                ax_fe.plot([0, max_fe], [0, max_fe], color='gray', lw=1)
+                ax_fe.plot(xf, sl*xf+ic, color='#4472C4', lw=1.5)
+                ax_fe.set_xlim(0, max_fe); ax_fe.set_ylim(0, max_fe)
+                ax_fe.set_xlabel(f'Fe (%) CP', color='#444')
+                ax_fe.set_ylabel(f'Fe (%) {lbl_modelo}', color='#444')
+                ax_fe.set_title(f'Fe (%) - UE_FE = {ue_fe_disp}: {periodo_lbl}',
+                                color='#222', fontsize=11)
+                ax_fe.text(0.05, 0.95, f'Pearson: {pr_fe:.2f}',
+                           transform=ax_fe.transAxes, fontsize=11,
+                           verticalalignment='top', color='green')
+                style_ax(ax_fe)
 
-                # Panel 1: Mineral Planeado (FeM + FeDTT en MP)
-                setup_ax(axs[0], f'Mineral Planeado (MP) — CNN — {periodo_lbl}')
-                axs[0].set_ylabel('FeM MP (%)', color='#444')
-                for m, c, l, s, z in [
-                    (~mineral_mp, '#d9d9d9', 'Estéril', 18, 2),
-                    (mineral_mp,  '#2ca02c', 'Mineral', 22, 3),
-                ]:
-                    axs[0].scatter(df_base.loc[m,'fem_cp'], df_base.loc[m,'fem_mp'],
-                                   s=s, color=c, zorder=z, label=l)
-                axs[0].text(0.03, 0.97,
-                            f'Coef. Pearson: {pearson_fem:.2f}\n'
-                            f'Mineral: {mineral_mp.sum()}\n'
-                            f'Estéril: {(~mineral_mp).sum()}\n'
-                            f'Total: {len(df_base)}',
-                            transform=axs[0].transAxes, va='top', fontsize=9,
-                            bbox=dict(facecolor='white', edgecolor='none', pad=3))
-                axs[0].legend(loc='upper center', bbox_to_anchor=(0.5,-0.1),
-                              ncol=2, frameon=False, fontsize=9)
+                # Panel 2: FeDTT MP vs FeDTT CP
+                if has_dtt:
+                    ax_dtt = axs[1]
+                    min_dtt = merged_dtt[['fe_dtt_mp','fe_dtt_cp']].min().min() * 0.97
+                    max_dtt = merged_dtt[['fe_dtt_mp','fe_dtt_cp']].max().max() * 1.03
+                    sl2, ic2, *_ = linregress(merged_dtt['fe_dtt_cp'], merged_dtt['fe_dtt_mp'])
+                    xf2 = np.linspace(min_dtt, max_dtt, 100)
+                    ax_dtt.scatter(merged_dtt['fe_dtt_cp'], merged_dtt['fe_dtt_mp'],
+                                   s=12, color='#4472C4', alpha=0.5, edgecolors='none')
+                    ax_dtt.plot([min_dtt, max_dtt], [min_dtt, max_dtt], color='gray', lw=1)
+                    ax_dtt.plot(xf2, sl2*xf2+ic2, color='#4472C4', lw=1.5)
+                    ax_dtt.set_xlim(min_dtt, max_dtt); ax_dtt.set_ylim(min_dtt, max_dtt)
+                    ax_dtt.set_xlabel('FeDTT (%) CP', color='#444')
+                    ax_dtt.set_ylabel(f'FeDTT (%) {lbl_modelo}', color='#444')
+                    ax_dtt.set_title(f'FeDTT (%) - UE_FE = {ue_fe_disp}: {periodo_lbl}',
+                                     color='#222', fontsize=11)
+                    ax_dtt.text(0.05, 0.95, f'Pearson: {pr_dtt:.2f}',
+                                transform=ax_dtt.transAxes, fontsize=11,
+                                verticalalignment='top', color='green')
+                    style_ax(ax_dtt)
 
-                # Panel 2: Conciliación por Ley de Corte (ore_mp vs ore_cp)
-                setup_ax(axs[1], f'Conciliación según Ley de Corte — CNN — {periodo_lbl}')
-                for m, c, l, s, z in [
-                    (esteril_ore,   '#d9d9d9', 'Estéril',      18, 1),
-                    (coincidencia,  '#2ca02c', 'Coincidencia', 22, 4),
-                    (ganancia_ore,  '#1f77b4', 'Ganancia',     22, 3),
-                    (perdida_ore,   '#ff7f0e', 'Pérdida',      22, 3),
-                ]:
-                    axs[1].scatter(df_base.loc[m,'fem_cp'], df_base.loc[m,'fem_mp'],
-                                   s=s, color=c, zorder=z, label=l)
-                axs[1].text(0.03, 0.97,
-                            f'Coef. Pearson: {pearson_fem:.2f}\n'
-                            f'Coincidencia: {coincidencia.sum()}\n'
-                            f'Ganancia: {ganancia_ore.sum()}\n'
-                            f'Pérdida: {perdida_ore.sum()}\n'
-                            f'Estéril: {esteril_ore.sum()}',
-                            transform=axs[1].transAxes, va='top', fontsize=9,
-                            bbox=dict(facecolor='white', edgecolor='none', pad=3))
-                axs[1].legend(loc='upper center', bbox_to_anchor=(0.5,-0.1),
-                              ncol=4, frameon=False, fontsize=9)
-
-                # Panel 3: Impacto FeDTT (independiente del ore)
-                setup_ax(axs[2], f'Conciliación según FeDTT — CNN — {periodo_lbl}')
-                if 'fe_dtt_mp' in df_base.columns and 'fe_dtt_cp' in df_base.columns:
-                    coinc_dtt = (df_base['fe_dtt_mp'] >= cutoff_dtt_lc) & (df_base['fe_dtt_cp'] >= cutoff_dtt_lc)
-                    gain_dtt  = (df_base['fe_dtt_mp'] <  cutoff_dtt_lc) & (df_base['fe_dtt_cp'] >= cutoff_dtt_lc)
-                    rest_dtt  = ~(coinc_dtt | gain_dtt)
-                    for m, c, l, s, z in [
-                        (rest_dtt,  '#aec7e8', f'FeDTT < {cutoff_dtt_lc}',           18, 1),
-                        (coinc_dtt, '#1f77b4', f'FeDTT ≥ {cutoff_dtt_lc} (MP y CP)', 22, 3),
-                        (gain_dtt,  '#2ca02c', f'FeDTT ≥ {cutoff_dtt_lc} (CP)',      22, 4),
-                    ]:
-                        axs[2].scatter(df_base.loc[m,'fem_cp'], df_base.loc[m,'fem_mp'],
-                                       s=s, color=c, zorder=z, label=l)
-                    axs[2].text(0.03, 0.97,
-                                f'Coef. Pearson: {pearson_fem:.2f}\n'
-                                f'FeDTT ≥ {cutoff_dtt_lc} (MP y CP): {coinc_dtt.sum()}\n'
-                                f'FeDTT ≥ {cutoff_dtt_lc} (solo CP): {gain_dtt.sum()}\n'
-                                f'FeDTT < {cutoff_dtt_lc}: {rest_dtt.sum()}',
-                                transform=axs[2].transAxes, va='top', fontsize=9,
-                                bbox=dict(facecolor='white', edgecolor='none', pad=3))
-                    axs[2].legend(loc='upper center', bbox_to_anchor=(0.5,-0.1),
-                                  ncol=1, frameon=False, fontsize=9)
-                else:
-                    axs[2].text(0.5, 0.5, 'Columna fe_dtt no disponible',
-                                transform=axs[2].transAxes, ha='center', color='#888')
-
-                for ax in axs:
-                    ax.set_xlabel('FeM CP (%)', color='#444')
-
-                plt.suptitle(f'Cerro Negro Norte{fase_lbl} — {cutoff_str}',
+                plt.suptitle(f'Cerro Negro Norte{fase_lbl} — {lbl_modelo} vs CP',
                              color='#222', fontsize=11, y=1.01)
                 plt.tight_layout()
                 png_disp = save_png(fig, dpi=150)
                 st.pyplot(fig); plt.close()
-                st.download_button("⬇️ PNG Dispersión (3 paneles)", png_disp,
-                                   f"dispersion_cnn_{mes_abr}.png", "image/png", key="dl_png_disp")
+                st.download_button("⬇️ PNG Dispersión", png_disp,
+                                   f"dispersion_cnn_{lbl_modelo}_{mes_abr}.png",
+                                   "image/png", key="dl_png_disp")
 
         except Exception as e:
             st.error(f"Error en dispersión: {e}")
