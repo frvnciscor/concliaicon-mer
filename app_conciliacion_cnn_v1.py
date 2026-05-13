@@ -1124,7 +1124,7 @@ with tab4:
 # ─────────────────────────────────────────────
 with tab5:
     st.markdown("### Análisis de Dispersión — Fe y FeDTT")
-    st.markdown("*Bloques con UE_FE = 1. Selector LP o MP vs CP.*")
+    st.markdown("*Bloques filtrados por UE_FE. Selector LP o MP vs CP.*")
 
     if df_mp.empty:
         st.info("Carga los archivos MP para el análisis de dispersión.")
@@ -1137,112 +1137,114 @@ with tab5:
             periodo_disp = st.radio("Período:", ["Mes", "Acumulado"],
                                     horizontal=True, key="periodo_disp")
         with _d3:
-            ue_fe_disp = st.selectbox("UE_FE =", [1, 2, 3], index=0, key="ue_fe_disp")
+            ue_fe_disp = st.selectbox("UE_FE =", [1, 2, 3, 4], index=0, key="ue_fe_disp")
 
         try:
-            arch_d = f'output_mp_{mes}.csv'
-
-            if periodo_disp == "Acumulado":
-                df_mp_d = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
-                df_lp_d = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy()
-            else:
-                df_mp_d = df_mp[df_mp['ARCHIVO'] == arch_d].drop_duplicates('block_id').copy()
-                df_lp_d = df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
-
+            import seaborn as _sns
+            arch_d    = f'output_mp_{mes}.csv'
             periodo_lbl = f"Ene–{mes_abr}" if periodo_disp == "Acumulado" else mes_abr
+            color_puntos = _sns.color_palette()[0]
 
             if modelo_disp == "MP":
-                # MP vs CP: merge por block_id entre df_mp y df_cp
-                df_cp_d = df_cp[
-                    (df_cp['extraccion'] <= mes) if periodo_disp == "Acumulado"
-                    else (df_cp['extraccion'] == mes)
-                ].drop_duplicates('block_id').copy()
-
+                if periodo_disp == "Acumulado":
+                    df_mp_d = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                    df_cp_d = df_cp[df_cp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                else:
+                    df_mp_d = df_mp[df_mp['ARCHIVO'] == arch_d].drop_duplicates('block_id').copy()
+                    df_cp_d = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id').copy()
                 merged = pd.merge(
+                    df_cp_d[['block_id','extraccion','fe','fe_dtt','ue_fe']],
                     df_mp_d[['block_id','extraccion','fe','fe_dtt','ue_fe']],
-                    df_cp_d[['block_id','extraccion','fe','fe_dtt']],
-                    on=['block_id','extraccion'], suffixes=('_mp','_cp')
+                    on=['block_id','extraccion'], suffixes=('_cp','_mp')
                 )
+                merged = merged[
+                    (merged['ue_fe_cp'] == ue_fe_disp) &
+                    (merged['ue_fe_mp'] == ue_fe_disp)
+                ].copy()
                 lbl_modelo = "MP"
             else:
-                # LP vs CP: usar df (merge LP+CP ya hecho)
-                merged = df_lp_d[['block_id','extraccion','fe','fe_dtt','ue_fe',
-                                    'fe_cp','fe_dtt_cp']].copy()
+                if periodo_disp == "Acumulado":
+                    df_d = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                else:
+                    df_d = df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
+                merged = df_d[['block_id','extraccion',
+                               'fe','fe_dtt','ue_fe',
+                               'fe_cp','fe_dtt_cp','ue_fe_cp']].copy()
                 merged = merged.rename(columns={
-                    'fe': 'fe_mp', 'fe_dtt': 'fe_dtt_mp',
-                    'fe_cp': 'fe_cp', 'fe_dtt_cp': 'fe_dtt_cp',
-                    'ue_fe': 'ue_fe'
+                    'fe':     'fe_mp',
+                    'fe_dtt': 'fe_dtt_mp',
+                    'ue_fe':  'ue_fe_mp',
                 })
+                merged = merged[
+                    (merged['ue_fe_cp'] == ue_fe_disp) &
+                    (merged['ue_fe_mp'] == ue_fe_disp)
+                ].copy()
                 lbl_modelo = "LP"
 
-            # Filtrar por ue_fe == ue_fe_disp
-            if 'ue_fe' in merged.columns:
-                merged = merged[merged['ue_fe'] == ue_fe_disp].copy()
-
-            # Limpiar NaN
             merged = merged.dropna(subset=['fe_mp','fe_cp']).copy()
 
             if merged.empty:
-                st.warning(f"Sin datos para UE_FE = {ue_fe_disp} en el período seleccionado.")
+                st.warning(f"Sin datos para UE_FE = {ue_fe_disp}.")
             else:
-                # Calcular Pearson
-                pr_fe, _   = pearsonr(merged['fe_cp'], merged['fe_mp'])
-                has_dtt = ('fe_dtt_mp' in merged.columns and
-                           'fe_dtt_cp' in merged.columns and
-                           merged[['fe_dtt_mp','fe_dtt_cp']].dropna().shape[0] > 3)
-                if has_dtt:
-                    merged_dtt = merged.dropna(subset=['fe_dtt_mp','fe_dtt_cp'])
-                    pr_dtt, _ = pearsonr(merged_dtt['fe_dtt_cp'], merged_dtt['fe_dtt_mp'])
+                # Dos paneles: Fe y FeDTT
+                comparaciones = [
+                    ('fe_cp',     'fe_mp',     'Fe (%)',    (0,  70), (0,  70)),
+                    ('fe_dtt_cp', 'fe_dtt_mp', 'FeDTT (%)', (40, 75), (40, 75)),
+                ]
 
-                n_cols = 2 if has_dtt else 1
-                fig, axs = plt.subplots(1, n_cols,
-                                        figsize=(7*n_cols, 6),
-                                        facecolor='white', squeeze=False)
-                axs = axs[0]
-                for ax in axs: ax.set_facecolor('white')
+                fig, axes = plt.subplots(1, 2, figsize=(10, 5), facecolor='white')
+                for ax in axes: ax.set_facecolor('white')
 
-                # Panel 1: Fe MP vs Fe CP
-                ax_fe = axs[0]
-                max_fe = max(merged['fe_cp'].max(), merged['fe_mp'].max()) * 1.05
-                sl, ic, *_ = linregress(merged['fe_cp'], merged['fe_mp'])
-                xf = np.linspace(0, max_fe, 100)
-                ax_fe.scatter(merged['fe_cp'], merged['fe_mp'],
-                              s=12, color='#4472C4', alpha=0.5, edgecolors='none')
-                ax_fe.plot([0, max_fe], [0, max_fe], color='gray', lw=1)
-                ax_fe.plot(xf, sl*xf+ic, color='#4472C4', lw=1.5)
-                ax_fe.set_xlim(0, max_fe); ax_fe.set_ylim(0, max_fe)
-                ax_fe.set_xlabel(f'Fe (%) CP', color='#444')
-                ax_fe.set_ylabel(f'Fe (%) {lbl_modelo}', color='#444')
-                ax_fe.set_title(f'Fe (%) - UE_FE = {ue_fe_disp}: {periodo_lbl}',
-                                color='#222', fontsize=11)
-                ax_fe.text(0.05, 0.95, f'Pearson: {pr_fe:.2f}',
-                           transform=ax_fe.transAxes, fontsize=11,
-                           verticalalignment='top', color='green')
-                style_ax(ax_fe)
+                for idx, (col_cp, col_mp, titulo, xlim, ylim) in enumerate(comparaciones):
+                    ax = axes[idx]
+                    df_plot = merged[[col_cp, col_mp]].dropna()
 
-                # Panel 2: FeDTT MP vs FeDTT CP
-                if has_dtt:
-                    ax_dtt = axs[1]
-                    min_dtt = merged_dtt[['fe_dtt_mp','fe_dtt_cp']].min().min() * 0.97
-                    max_dtt = merged_dtt[['fe_dtt_mp','fe_dtt_cp']].max().max() * 1.03
-                    sl2, ic2, *_ = linregress(merged_dtt['fe_dtt_cp'], merged_dtt['fe_dtt_mp'])
-                    xf2 = np.linspace(min_dtt, max_dtt, 100)
-                    ax_dtt.scatter(merged_dtt['fe_dtt_cp'], merged_dtt['fe_dtt_mp'],
-                                   s=12, color='#4472C4', alpha=0.5, edgecolors='none')
-                    ax_dtt.plot([min_dtt, max_dtt], [min_dtt, max_dtt], color='gray', lw=1)
-                    ax_dtt.plot(xf2, sl2*xf2+ic2, color='#4472C4', lw=1.5)
-                    ax_dtt.set_xlim(min_dtt, max_dtt); ax_dtt.set_ylim(min_dtt, max_dtt)
-                    ax_dtt.set_xlabel('FeDTT (%) CP', color='#444')
-                    ax_dtt.set_ylabel(f'FeDTT (%) {lbl_modelo}', color='#444')
-                    ax_dtt.set_title(f'FeDTT (%) - UE_FE = {ue_fe_disp}: {periodo_lbl}',
-                                     color='#222', fontsize=11)
-                    ax_dtt.text(0.05, 0.95, f'Pearson: {pr_dtt:.2f}',
-                                transform=ax_dtt.transAxes, fontsize=11,
-                                verticalalignment='top', color='green')
-                    style_ax(ax_dtt)
+                    if df_plot.empty:
+                        ax.text(0.5, 0.5, f'{titulo}\nSin datos',
+                                transform=ax.transAxes, ha='center', color='#888')
+                        continue
+
+                    # Scatterplot (sin línea de tendencia visible separada - solo identidad)
+                    _sns.scatterplot(x=col_cp, y=col_mp, data=df_plot,
+                                     alpha=1, edgecolors='none', s=20,
+                                     ax=ax, color=color_puntos)
+
+                    # Línea identidad 1:1
+                    ax.plot(xlim, ylim, color='gray', linestyle='-', lw=1)
+
+                    # Línea de ajuste (sesgo) — igual que notebook
+                    sl, ic, *_ = linregress(df_plot[col_cp], df_plot[col_mp])
+                    xf = np.linspace(xlim[0], xlim[1], 100)
+                    ax.plot(xf, sl*xf+ic, color=color_puntos, linestyle='--', linewidth=1)
+
+                    ax.set_xlim(xlim); ax.set_ylim(ylim)
+                    ax.set_xlabel(f'{titulo} CP', color='#444')
+                    ax.set_ylabel(f'{titulo} {lbl_modelo}', color='#444')
+                    ax.set_title(f'{titulo} - UE_FE = {ue_fe_disp}: {periodo_lbl}',
+                                 color='#222', fontsize=11)
+                    style_ax(ax)
+
+                    # Pearson en verde (formato notebook original)
+                    pr, _ = pearsonr(df_plot[col_cp], df_plot[col_mp])
+                    ax.text(0.05, 0.92,
+                            f'UE_FE = {ue_fe_disp} ({periodo_lbl})\nCoef. Pearson = {pr:.2f}',
+                            transform=ax.transAxes, fontsize=10,
+                            verticalalignment='top', color='green')
+
+                    # Histogramas marginales (igual que notebook)
+                    ax_top = ax.inset_axes([0, 1.02, 1, 0.2], sharex=ax)
+                    ax_top.hist(df_plot[col_cp], bins=20,
+                                color=color_puntos, alpha=0.9, linewidth=0)
+                    ax_top.axis('off')
+
+                    ax_right = ax.inset_axes([1.02, 0, 0.2, 1], sharey=ax)
+                    ax_right.hist(df_plot[col_mp], bins=20,
+                                  orientation='horizontal',
+                                  color=color_puntos, alpha=0.9, linewidth=0)
+                    ax_right.axis('off')
 
                 plt.suptitle(f'Cerro Negro Norte{fase_lbl} — {lbl_modelo} vs CP',
-                             color='#222', fontsize=11, y=1.01)
+                             color='#222', fontsize=11, y=1.04)
                 plt.tight_layout()
                 png_disp = save_png(fig, dpi=150)
                 st.pyplot(fig); plt.close()
@@ -1254,9 +1256,6 @@ with tab5:
             st.error(f"Error en dispersión: {e}")
 
 
-# ─────────────────────────────────────────────
-# TAB 6 — CUADRANTES FeM + MATRIZ ORE/WASTE
-# ─────────────────────────────────────────────
 with tab6:
     st.markdown("### Conciliación por Cuadrantes FeM")
     st.markdown("*Scatter y matriz Ore/Waste usan exactamente los mismos bloques.*")
