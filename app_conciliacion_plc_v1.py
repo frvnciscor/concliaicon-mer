@@ -1186,41 +1186,42 @@ with tab5:
 # ─────────────────────────────────────────────
 with tab6:
     st.markdown("### Conciliación por Cuadrantes FeM")
-    st.markdown("*Análisis de coincidencia, pérdida y ganancia sobre corte FeM.*")
+    st.markdown("*Análisis de coincidencia, pérdida y ganancia sobre corte FeM — mismos bloques que la matriz binaria.*")
 
     if df_mp.empty:
         st.info("Carga los archivos MP para el análisis de cuadrantes.")
     else:
-        cq1, cq2, cq3 = st.columns(3)
+        cq1, cq2 = st.columns(2)
         with cq1:
             cutoff_fem_q = st.number_input("Corte FeM (%)", value=25.0, step=0.5, key="cutoff_fem_q")
         with cq2:
-            ue_q = st.selectbox("UE_FE", [1, 2, 3, 4, 5, 6], index=1, key="ue_q")
-        with cq3:
             periodo_q = st.radio("Período:", ["Mes", "Acumulado"], horizontal=True, key="periodo_q")
 
         try:
-            arch_q    = f'output_mp_{mes}.csv'
-            df_mp_q   = df_mp[df_mp['ARCHIVO'] == arch_q].drop_duplicates('block_id').copy()
-            df_cp_q   = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id').copy()
+            arch_q = f'output_mp_{mes}.csv'
 
             if periodo_q == "Acumulado":
                 df_mp_q = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
-                df_cp_q = df_cp[df_cp['extraccion'] <= mes].drop_duplicates('block_id').copy()
-
-            merged_q = pd.merge(df_cp_q, df_mp_q, on='block_id', suffixes=('_cp','_mp'))
-
-            if 'ue_fe_cp' in merged_q.columns and 'ue_fe_mp' in merged_q.columns:
-                df_base = merged_q[
-                    (merged_q['ue_fe_cp'] == ue_q) & (merged_q['ue_fe_mp'] == ue_q)
-                ].copy()
+                df_cp_q = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy()
             else:
-                df_base = merged_q.copy()
+                df_mp_q = df_mp[df_mp['ARCHIVO'] == arch_q].drop_duplicates('block_id').copy()
+                df_cp_q = df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
 
-            if df_base.empty or 'fem_cp' not in df_base.columns or 'fem_mp' not in df_base.columns:
+            # Merge con filtro de volumen (igual que matriz binaria)
+            df_base = pd.merge(
+                df_mp_q[['block_id', 'extraccion', 'fem',
+                          'proportional_volume', 'dim_x', 'dim_y', 'dim_z']],
+                df_cp_q[['block_id', 'extraccion', 'fem']],
+                on=['block_id', 'extraccion'], suffixes=('_mp', '_cp')
+            )
+            df_base = df_base[
+                df_base['proportional_volume'] >= 0.75 *
+                df_base['dim_x'] * df_base['dim_y'] * df_base['dim_z']
+            ][['fem_mp', 'fem_cp']].dropna().copy()
+
+            if df_base.empty:
                 st.warning("Sin datos suficientes para el análisis de cuadrantes.")
             else:
-                df_base = df_base[['fem_cp','fem_mp']].dropna()
                 pr_q, _ = pearsonr(df_base['fem_cp'], df_base['fem_mp'])
 
                 coincidencia = (df_base['fem_cp'] >= cutoff_fem_q) & (df_base['fem_mp'] >= cutoff_fem_q)
@@ -1229,24 +1230,22 @@ with tab6:
                 ganancia     = (df_base['fem_cp'] >= cutoff_fem_q) & (df_base['fem_mp'] <  cutoff_fem_q)
 
                 conteos = {
-                    "I (Coincidencia)":   int(coincidencia.sum()),
-                    "II (Pérdida)":       int(perdida.sum()),
-                    "III (Estéril)":      int(esteril_q.sum()),
-                    "IV (Ganancia)":      int(ganancia.sum()),
+                    "I":   int(coincidencia.sum()),
+                    "II":  int(perdida.sum()),
+                    "III": int(esteril_q.sum()),
+                    "IV":  int(ganancia.sum()),
                 }
 
-                # Métricas
                 r1 = st.columns(4)
                 for col_w, (lbl, val), cls in zip(r1,
-                    [("Coincidencia Mineral (I)", conteos["I (Coincidencia)"]),
-                     ("Pérdida Mineral (II)",     conteos["II (Pérdida)"]),
-                     ("Coincidencia Estéril (III)",conteos["III (Estéril)"]),
-                     ("Ganancia Mineral (IV)",    conteos["IV (Ganancia)"])],
+                    [("Coincidencia Mineral (I)", conteos["I"]),
+                     ("Pérdida Mineral (II)",     conteos["II"]),
+                     ("Coincidencia Estéril (III)",conteos["III"]),
+                     ("Ganancia Mineral (IV)",    conteos["IV"])],
                     ['green','red','','blue']):
                     with col_w:
                         st.markdown(_metric_html(lbl, f'{val:,}', cls), unsafe_allow_html=True)
 
-                # Gráfico cuadrantes
                 max_fem = max(df_base['fem_cp'].max(), df_base['fem_mp'].max()) * 1.05
                 fig, ax = make_fig((6, 6))
 
@@ -1275,12 +1274,12 @@ with tab6:
                     ax.text(xp, yp, txt, fontsize=12, weight='bold', color='#444')
 
                 ax.text(0.05, 0.95,
-                        f'UE_FE = {ue_q} · {mes_abr}\n'
+                        f'{mes_abr} · FeM corte = {cutoff_fem_q}%\n'
                         f'Coef. Pearson: {pr_q:.3f}\n'
-                        f'Coincidencia (I): {conteos["I (Coincidencia)"]:,}\n'
-                        f'Pérdida (II): {conteos["II (Pérdida)"]:,}\n'
-                        f'Estéril (III): {conteos["III (Estéril)"]:,}\n'
-                        f'Ganancia (IV): {conteos["IV (Ganancia)"]:,}',
+                        f'Coincidencia (I): {conteos["I"]:,}\n'
+                        f'Pérdida (II): {conteos["II"]:,}\n'
+                        f'Estéril (III): {conteos["III"]:,}\n'
+                        f'Ganancia (IV): {conteos["IV"]:,}',
                         transform=ax.transAxes, fontsize=9, color='#333', va='top',
                         bbox=dict(facecolor='#f5f5f5', edgecolor='#ddd', boxstyle='round,pad=0.4'))
 
