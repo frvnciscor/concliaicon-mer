@@ -605,10 +605,20 @@ with tab2:
     pos = np.arange(n_meses)
     meses_labels = [MESES[i] for i in range(1, 13)]
 
-    ton_mod = tabla_plot[col_ton_m].values  if col_ton_m  in tabla_plot.columns else np.full(12, np.nan)
-    cal_mod = tabla_plot[col_cal_m].values  if col_cal_m  in tabla_plot.columns else np.full(12, np.nan)
-    ton_cp  = tabla_plot['tonelaje_cp'].values if 'tonelaje_cp' in tabla_plot.columns else np.full(12, np.nan)
-    cal_cp  = tabla_plot[col_cal_cp].values if col_cal_cp in tabla_plot.columns else np.full(12, np.nan)
+    def _safe_array(df, col):
+        """Extrae columna como array de 12 elementos, NaN donde no hay dato."""
+        if col not in df.columns:
+            return np.full(12, np.nan)
+        arr = df[col].values.copy().astype(float)
+        # Asegurar longitud 12
+        if len(arr) < 12:
+            arr = np.concatenate([arr, np.full(12 - len(arr), np.nan)])
+        return arr[:12]
+
+    ton_mod = _safe_array(tabla_plot, col_ton_m)
+    cal_mod = _safe_array(tabla_plot, col_cal_m)
+    ton_cp  = _safe_array(tabla_plot, 'tonelaje_cp')
+    cal_cp  = _safe_array(tabla_plot, col_cal_cp)
 
     fig, ax1 = make_fig((14, 5))
     bw = 0.4
@@ -621,6 +631,7 @@ with tab2:
     ax1.set_ylabel('Tonelaje (kt)', color='#444')
     ax1.set_xticks(pos)
     ax1.set_xticklabels(meses_labels, color='#444')
+    ax1.set_xlim(-0.5, 11.5)  # forzar siempre los 12 meses en el eje X
     ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
     ax1.tick_params(colors='#444')
     ax1.set_ylim(ton_ymin, ton_ymax)
