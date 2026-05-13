@@ -298,24 +298,6 @@ with st.sidebar:
     col_mp_line = st.color_picker("MP (línea)", "#9370DB")   # purple original
     col_cp_line = st.color_picker("CP (línea)", "#4682B4")   # steelblue original
 
-    st.markdown("### 🎨 Paleta — Heatmap / Matrices")
-    HEATMAP_PALETTES = {
-        "Blues (original notebook)": "Blues",
-        "YlOrBr":                    "YlOrBr",
-        "Greens":                    "Greens",
-        "Purples":                   "Purples",
-        "Oranges":                   "Oranges",
-        "RdYlGn":                    "RdYlGn",
-        "viridis":                   "viridis",
-        "coolwarm":                  "coolwarm",
-    }
-    heatmap_palette_label = st.selectbox(
-        "Paleta de colores",
-        options=list(HEATMAP_PALETTES.keys()),
-        index=0,
-        key="heatmap_palette"
-    )
-    heatmap_cmap = HEATMAP_PALETTES[heatmap_palette_label]
     st.markdown("---")
 
     st.markdown("### 🎯 Objetivo anual")
@@ -453,7 +435,12 @@ def build_tabla(df, df_mp):
 
 
 tabla_mensual = build_tabla(df, df_mp)
-tabla_plot    = tabla_mensual[tabla_mensual['mes'] != 'Total'].reset_index(drop=True)
+
+# Garantizar que tabla_plot tenga SIEMPRE los 12 meses en orden, con NaN para los vacíos
+_df_12 = pd.DataFrame({'extraccion': range(1, 13), 'mes': [MESES[i] for i in range(1, 13)]})
+_tabla_sin_total = tabla_mensual[tabla_mensual['mes'] != 'Total']
+tabla_plot = pd.merge(_df_12, _tabla_sin_total.drop(columns=['mes'], errors='ignore'),
+                      on='extraccion', how='left').reset_index(drop=True)
 cutoff_str    = " AND ".join([f"{c['var']} {c['op']} {c['val']}" for c in criterios])
 mes_nombre    = calendar.month_name[mes]
 mes_abr       = MESES[mes]
@@ -1093,10 +1080,10 @@ with tab5:
                     max_val     = max(xv.max(), yv.max()) * 1.08
 
                     fig, ax = make_fig((6, 6))
-                    ax.scatter(xv, yv, s=15, alpha=0.6, color=col_lp, edgecolors='none')
+                    ax.scatter(xv, yv, s=15, alpha=0.6, color='#4472C4', edgecolors='none')
                     ax.plot([0, max_val], [0, max_val], color='#aaa', lw=1, linestyle=':')
                     xf = np.linspace(0, max_val, 100)
-                    ax.plot(xf, sl*xf+ic, color=col_cp, linestyle='--', lw=1.8)
+                    ax.plot(xf, sl*xf+ic, color='#cc4444', linestyle='--', lw=1.8)
                     ax.set_xlim(0, max_val); ax.set_ylim(0, max_val)
                     ax.set_xlabel(f'{var_disp_global.upper()} CP (%)', color='#444')
                     ax.set_ylabel(f'{var_disp_global.upper()} MP (%)', color='#444')
@@ -1108,9 +1095,9 @@ with tab5:
                             bbox=dict(facecolor='#f5f5f5', edgecolor='#ddd', boxstyle='round,pad=0.4'))
                     ax_t = ax.inset_axes([0, 1.02, 1, 0.18], sharex=ax)
                     ax_r = ax.inset_axes([1.02, 0, 0.18, 1], sharey=ax)
-                    ax_t.hist(xv, bins=20, color=col_lp, alpha=0.75, linewidth=0)
+                    ax_t.hist(xv, bins=20, color='#4472C4', alpha=0.75, linewidth=0)
                     ax_t.set_facecolor('white'); ax_t.axis('off')
-                    ax_r.hist(yv, bins=20, orientation='horizontal', color=col_lp, alpha=0.75, linewidth=0)
+                    ax_r.hist(yv, bins=20, orientation='horizontal', color='#4472C4', alpha=0.75, linewidth=0)
                     ax_r.set_facecolor('white'); ax_r.axis('off')
                     ax.set_title(f'{var_disp_global.upper()} MP vs CP — {mes_abr}',
                                  color='#222', pad=28, fontsize=11)
@@ -1140,6 +1127,27 @@ with tab6:
             "Ocurrencia MP vs CP",
             "Ore/Waste (binario)"
         ], horizontal=True)
+
+        # Selector de paleta de colores para el heatmap
+        HEATMAP_PALETTES = {
+            "Blues":    "Blues",
+            "YlOrBr":   "YlOrBr",
+            "Greens":   "Greens",
+            "Purples":  "Purples",
+            "Oranges":  "Oranges",
+            "RdYlGn":   "RdYlGn",
+            "viridis":  "viridis",
+            "coolwarm": "coolwarm",
+        }
+        _hpal_col, _ = st.columns([1, 2])
+        with _hpal_col:
+            heatmap_palette_label = st.selectbox(
+                "🎨 Paleta de colores",
+                options=list(HEATMAP_PALETTES.keys()),
+                index=0,
+                key="heatmap_palette"
+            )
+        heatmap_cmap = HEATMAP_PALETTES[heatmap_palette_label]
 
         arch       = f'output_mp_{mes}.csv'
         df_mp_mes2 = df_mp[df_mp['ARCHIVO'] == arch].drop_duplicates('block_id')
@@ -1249,8 +1257,7 @@ with tab6:
             sns.heatmap(ct_pct, cmap=heatmap_cmap, annot=annot, fmt='',
                         square=True, linewidths=0.5, cbar=True,
                         annot_kws={'size':10}, ax=ax)
-            ax.set_title(f'Cumplimiento — {periodo_lbl}  [{heatmap_palette_label}]',
-                         color='#222', pad=10)
+            ax.set_title(f'Cumplimiento — {periodo_lbl}', color='#222', pad=10)
             ax.tick_params(colors='#333')
             ax.set_xlabel('CP', color='#444'); ax.set_ylabel('MP', color='#444')
             plt.tight_layout()
