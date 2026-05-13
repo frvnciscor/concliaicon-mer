@@ -941,25 +941,29 @@ with tab4:
                 text=[f"{v:,.1f}" for v in vals],
                 textposition="outside",
                 y=vals,
-                connector={"line":{"color":"rgba(63,63,63,0.5)"}},
             ))
             fw.update_layout(
                 title=dict(
                     text=f"<b>{title}</b>",
-                    font=dict(size=18, color='#222'),
+                    font=dict(size=24, color='#000000'),
                     x=0.0, xanchor='left'
                 ),
                 paper_bgcolor='white',
                 plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='#333', size=13),
+                font=dict(color='#000000', size=14),
                 height=420,
-                margin=dict(t=70, b=60, l=60, r=30)
+                margin=dict(t=80, b=60, l=60, r=30)
             )
             fw.update_yaxes(
                 title_text="Tonelaje (kt)",
                 tickformat=",d",
                 gridcolor='#eee',
-                zerolinecolor='#ccc'
+                zerolinecolor='#ccc',
+                tickfont=dict(color='#000000', size=12),
+                title_font=dict(color='#000000', size=12)
+            )
+            fw.update_xaxes(
+                tickfont=dict(color='#000000', size=12)
             )
             return fw, df_res
 
