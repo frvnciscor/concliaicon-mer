@@ -1256,11 +1256,15 @@ with tab6:
                     with col_w:
                         st.markdown(_metric_html(lbl, f'{val:,}', cls), unsafe_allow_html=True)
 
-                col_sc, col_mx = st.columns(2)
+                # Clasificación por corte FeM (consistente entre scatter y matriz)
+                df_fem['ore_mp_fem'] = np.where(df_fem['fem_mp'] >= cutoff_fem_q, 'mineral', 'esteril')
+                df_fem['ore_cp_fem'] = np.where(df_fem['fem_cp'] >= cutoff_fem_q, 'mineral', 'esteril')
 
-                with col_sc:
+                # Scatter (fila 1)
+                sc_col, _ = st.columns([1, 1])
+                with sc_col:
                     max_fem = max(df_fem['fem_cp'].max(), df_fem['fem_mp'].max()) * 1.05
-                    fig, ax = make_fig((6, 6))
+                    fig, ax = make_fig((7, 6))
                     ax.plot([0, max_fem], [0, max_fem], color='black', lw=1)
                     ax.axvline(cutoff_fem_q, ls='--', color='black', lw=1)
                     ax.axhline(cutoff_fem_q, ls='--', color='black', lw=1)
@@ -1276,11 +1280,13 @@ with tab6:
                     ax.set_xlabel('FeM CP (%)', color='#444')
                     ax.set_ylabel('FeM MP (%)', color='#444')
                     style_ax(ax)
-                    mid = max_fem * 0.75; low = max_fem * 0.15
-                    for txt, xp, yp in [('I',mid,mid*0.45),('II',low,mid*0.45),
-                                        ('III',low,low*0.45),('IV',mid,low*0.45)]:
-                        ax.text(xp, yp, txt, fontsize=12, weight='bold', color='#444')
-                    ax.text(0.05, 0.95,
+                    c = cutoff_fem_q
+                    hi = (c + max_fem) / 2
+                    lo = c / 2
+                    for txt, xp, yp in [('I',hi,hi),('II',lo,hi),('III',lo,lo),('IV',hi,lo)]:
+                        ax.text(xp, yp, txt, fontsize=13, weight='bold', color='#555',
+                                ha='center', va='center')
+                    ax.text(0.02, 0.98,
                             f'{mes_abr} · FeM corte = {cutoff_fem_q}%\n'
                             f'Coef. Pearson: {pr_q:.3f}\n'
                             f'Coincidencia (I): {conteos["I"]:,}\n'
@@ -1298,13 +1304,14 @@ with tab6:
                     st.download_button("⬇️ PNG Cuadrantes", png_cuad,
                                        f"cuadrantes_fem_plc_{mes_abr}.png", "image/png", key="dl_png_cuad")
 
-                with col_mx:
+                # Matriz Ore/Waste (fila 2) — mismo criterio fem >= cutoff
+                mx_col, _ = st.columns([1, 1])
+                with mx_col:
                     orden_ow = ['mineral','esteril']
                     ore_t_q  = CategoricalDtype(categories=orden_ow, ordered=True)
-                    union_q2 = union_q.copy()
-                    union_q2['ore_bin_mp'] = union_q2['ore_bin_mp'].astype(ore_t_q)
-                    union_q2['ore_bin_cp'] = union_q2['ore_bin_cp'].astype(ore_t_q)
-                    ct_ow = (pd.crosstab(union_q2['ore_bin_mp'], union_q2['ore_bin_cp'])
+                    df_fem['ore_mp_fem'] = pd.Categorical(df_fem['ore_mp_fem'], categories=orden_ow, ordered=True)
+                    df_fem['ore_cp_fem'] = pd.Categorical(df_fem['ore_cp_fem'], categories=orden_ow, ordered=True)
+                    ct_ow = (pd.crosstab(df_fem['ore_mp_fem'], df_fem['ore_cp_fem'])
                                .reindex(index=orden_ow[::-1], columns=orden_ow).fillna(0))
                     ct_ow_pct = ct_ow.div(ct_ow.sum(axis=1), axis=0).mul(100).round(1).fillna(0)
                     annot_ow  = (ct_ow.astype(int).apply(lambda c: c.map('{:,}'.format)).astype(str)
