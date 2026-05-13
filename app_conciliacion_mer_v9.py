@@ -1151,62 +1151,67 @@ with tab5:
                 st.error(f"Error en dispersión: {e}")
 
 
+
+
 # ─────────────────────────────────────────────
-# TAB 6 — MATRICES
-# NEW 2: precisión, recall, F1, dilución, pérdida (binario)
-# NEW 3: opción acumulado para matriz binaria
+# TAB 6 — CUADRANTES FeM + MATRIZ ORE/WASTE
 # ─────────────────────────────────────────────
 with tab6:
     st.markdown("### Conciliación por Cuadrantes FeM")
-    st.markdown("*Análisis de coincidencia, pérdida y ganancia sobre corte FeM — mismos bloques que la matriz binaria.*")
+    st.markdown("*Scatter y matriz Ore/Waste usan exactamente los mismos bloques.*")
 
     if df_mp.empty:
         st.info("Carga los archivos MP para el análisis de cuadrantes.")
     else:
-        cq1, cq2 = st.columns(2)
-        with cq1:
+        _cq1, _cq2, _cq3 = st.columns(3)
+        with _cq1:
             cutoff_fem_q = st.number_input("Corte FeM (%)", value=20.0, step=0.5, key="cutoff_fem_q")
-        with cq2:
+        with _cq2:
             periodo_q = st.radio("Período:", ["Mes", "Acumulado"], horizontal=True, key="periodo_q")
+        with _cq3:
+            HEATMAP_PAL_Q = {"Blues":"Blues","YlOrBr":"YlOrBr","Greens":"Greens",
+                             "Purples":"Purples","Oranges":"Oranges","RdYlGn":"RdYlGn",
+                             "viridis":"viridis","coolwarm":"coolwarm"}
+            hmap_q_lbl = st.selectbox("🎨 Paleta matriz", list(HEATMAP_PAL_Q.keys()), index=0, key="hmap_q")
+        hmap_q_cmap = HEATMAP_PAL_Q[hmap_q_lbl]
 
         try:
-            arch_q  = f'output_mp_{mes}.csv'
-
+            arch_q = f'output_mp_{mes}.csv'
             if periodo_q == "Acumulado":
-                df_mp_q = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
-                df_cp_q = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                dmp_q = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                dcp_q = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy()
             else:
-                df_mp_q = df_mp[df_mp['ARCHIVO'] == arch_q].drop_duplicates('block_id').copy()
-                df_cp_q = df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
+                dmp_q = df_mp[df_mp['ARCHIVO'] == arch_q].drop_duplicates('block_id').copy()
+                dcp_q = df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
 
-            # Merge con filtro de volumen (igual que matriz binaria)
-            df_base = pd.merge(
-                df_mp_q[['block_id', 'extraccion', 'fem',
-                          'proportional_volume', 'dim_x', 'dim_y', 'dim_z']],
-                df_cp_q[['block_id', 'extraccion', 'fem']],
-                on=['block_id', 'extraccion'], suffixes=('_mp', '_cp')
+            dmp_q['ore_bin'] = dmp_q['ore_mp'].replace({'marginal':'esteril'})
+            dcp_q['ore_bin'] = dcp_q['ore_cp'].replace({'marginal':'esteril'})
+
+            union_q = pd.merge(
+                dmp_q[['block_id','extraccion','fem','ore_bin',
+                        'proportional_volume','dim_x','dim_y','dim_z']],
+                dcp_q[['block_id','extraccion','fem','ore_bin']],
+                on=['block_id','extraccion'], suffixes=('_mp','_cp')
             )
-            df_base = df_base[
-                df_base['proportional_volume'] >= 0.75 *
-                df_base['dim_x'] * df_base['dim_y'] * df_base['dim_z']
-            ][['fem_mp', 'fem_cp']].dropna().copy()
+            union_q = union_q[
+                union_q['proportional_volume'] >= 0.75 *
+                union_q['dim_x'] * union_q['dim_y'] * union_q['dim_z']
+            ].copy()
 
-            if df_base.empty:
-                st.warning("Sin datos suficientes para el análisis de cuadrantes.")
+            df_fem = union_q[['fem_mp','fem_cp']].dropna()
+
+            if df_fem.empty:
+                st.warning("Sin datos suficientes.")
             else:
-                pr_q, _ = pearsonr(df_base['fem_cp'], df_base['fem_mp'])
+                pr_q, _ = pearsonr(df_fem['fem_cp'], df_fem['fem_mp'])
 
-                coincidencia = (df_base['fem_cp'] >= cutoff_fem_q) & (df_base['fem_mp'] >= cutoff_fem_q)
-                perdida      = (df_base['fem_cp'] <  cutoff_fem_q) & (df_base['fem_mp'] >= cutoff_fem_q)
-                esteril_q    = (df_base['fem_cp'] <  cutoff_fem_q) & (df_base['fem_mp'] <  cutoff_fem_q)
-                ganancia     = (df_base['fem_cp'] >= cutoff_fem_q) & (df_base['fem_mp'] <  cutoff_fem_q)
+                coincidencia = (df_fem['fem_cp'] >= cutoff_fem_q) & (df_fem['fem_mp'] >= cutoff_fem_q)
+                perdida      = (df_fem['fem_cp'] <  cutoff_fem_q) & (df_fem['fem_mp'] >= cutoff_fem_q)
+                esteril_q    = (df_fem['fem_cp'] <  cutoff_fem_q) & (df_fem['fem_mp'] <  cutoff_fem_q)
+                ganancia     = (df_fem['fem_cp'] >= cutoff_fem_q) & (df_fem['fem_mp'] <  cutoff_fem_q)
 
-                conteos = {
-                    "I":   int(coincidencia.sum()),
-                    "II":  int(perdida.sum()),
-                    "III": int(esteril_q.sum()),
-                    "IV":  int(ganancia.sum()),
-                }
+                conteos = {"I": int(coincidencia.sum()), "II": int(perdida.sum()),
+                           "III": int(esteril_q.sum()), "IV": int(ganancia.sum())}
 
                 r1 = st.columns(4)
                 for col_w, (lbl, val), cls in zip(r1,
@@ -1218,225 +1223,191 @@ with tab6:
                     with col_w:
                         st.markdown(_metric_html(lbl, f'{val:,}', cls), unsafe_allow_html=True)
 
-                max_fem = max(df_base['fem_cp'].max(), df_base['fem_mp'].max()) * 1.05
-                fig, ax = make_fig((6, 6))
+                col_sc, col_mx = st.columns(2)
 
-                ax.plot([0, max_fem], [0, max_fem], color='black', lw=1)
-                ax.axvline(cutoff_fem_q, ls='--', color='black', lw=1)
-                ax.axhline(cutoff_fem_q, ls='--', color='black', lw=1)
-
-                ax.scatter(df_base.loc[esteril_q,   'fem_cp'], df_base.loc[esteril_q,   'fem_mp'],
-                           s=18, color='#d9d9d9', label='Estéril', alpha=0.8)
-                ax.scatter(df_base.loc[coincidencia,'fem_cp'], df_base.loc[coincidencia,'fem_mp'],
-                           s=18, color='#2ca02c', label='Coincidencia', alpha=0.8)
-                ax.scatter(df_base.loc[perdida,     'fem_cp'], df_base.loc[perdida,     'fem_mp'],
-                           s=18, color='#ff7f0e', label='Pérdida', alpha=0.8)
-                ax.scatter(df_base.loc[ganancia,    'fem_cp'], df_base.loc[ganancia,    'fem_mp'],
-                           s=18, color='#1f77b4', label='Ganancia', alpha=0.8)
-
-                ax.set_xlim(0, max_fem); ax.set_ylim(0, max_fem)
-                ax.set_xlabel('FeM CP (%)', color='#444')
-                ax.set_ylabel('FeM MP (%)', color='#444')
-                style_ax(ax)
-
-                mid = max_fem * 0.75
-                low = max_fem * 0.15
-                for txt, xp, yp in [('I', mid, mid*0.45), ('II', low, mid*0.45),
-                                     ('III', low, low*0.45), ('IV', mid, low*0.45)]:
-                    ax.text(xp, yp, txt, fontsize=12, weight='bold', color='#444')
-
-                ax.text(0.05, 0.95,
-                        f'{mes_abr} · FeM corte = {cutoff_fem_q}%\n'
-                        f'Coef. Pearson: {pr_q:.3f}\n'
-                        f'Coincidencia (I): {conteos["I"]:,}\n'
-                        f'Pérdida (II): {conteos["II"]:,}\n'
-                        f'Estéril (III): {conteos["III"]:,}\n'
-                        f'Ganancia (IV): {conteos["IV"]:,}',
-                        transform=ax.transAxes, fontsize=9, color='#333', va='top',
-                        bbox=dict(facecolor='#f5f5f5', edgecolor='#ddd', boxstyle='round,pad=0.4'))
-
-                ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.08),
-                          ncol=4, frameon=False, fontsize=9, labelcolor='#333')
-                ax.set_title(f'Conciliación FeM MP–CP — {mes_abr}', color='#222', fontsize=11)
-                plt.tight_layout()
-
-                cq_col, _ = st.columns([1, 1])
-                with cq_col:
+                with col_sc:
+                    max_fem = max(df_fem['fem_cp'].max(), df_fem['fem_mp'].max()) * 1.05
+                    fig, ax = make_fig((6, 6))
+                    ax.plot([0, max_fem], [0, max_fem], color='black', lw=1)
+                    ax.axvline(cutoff_fem_q, ls='--', color='black', lw=1)
+                    ax.axhline(cutoff_fem_q, ls='--', color='black', lw=1)
+                    ax.scatter(df_fem.loc[esteril_q,   'fem_cp'], df_fem.loc[esteril_q,   'fem_mp'],
+                               s=18, color='#d9d9d9', label='Estéril', alpha=0.8)
+                    ax.scatter(df_fem.loc[coincidencia,'fem_cp'], df_fem.loc[coincidencia,'fem_mp'],
+                               s=18, color='#2ca02c', label='Coincidencia', alpha=0.8)
+                    ax.scatter(df_fem.loc[perdida,     'fem_cp'], df_fem.loc[perdida,     'fem_mp'],
+                               s=18, color='#ff7f0e', label='Pérdida', alpha=0.8)
+                    ax.scatter(df_fem.loc[ganancia,    'fem_cp'], df_fem.loc[ganancia,    'fem_mp'],
+                               s=18, color='#1f77b4', label='Ganancia', alpha=0.8)
+                    ax.set_xlim(0, max_fem); ax.set_ylim(0, max_fem)
+                    ax.set_xlabel('FeM CP (%)', color='#444')
+                    ax.set_ylabel('FeM MP (%)', color='#444')
+                    style_ax(ax)
+                    mid = max_fem * 0.75; low = max_fem * 0.15
+                    for txt, xp, yp in [('I',mid,mid*0.45),('II',low,mid*0.45),
+                                        ('III',low,low*0.45),('IV',mid,low*0.45)]:
+                        ax.text(xp, yp, txt, fontsize=12, weight='bold', color='#444')
+                    ax.text(0.05, 0.95,
+                            f'{mes_abr} · FeM corte = {cutoff_fem_q}%\n'
+                            f'Coef. Pearson: {pr_q:.3f}\n'
+                            f'Coincidencia (I): {conteos["I"]:,}\n'
+                            f'Pérdida (II): {conteos["II"]:,}\n'
+                            f'Estéril (III): {conteos["III"]:,}\n'
+                            f'Ganancia (IV): {conteos["IV"]:,}',
+                            transform=ax.transAxes, fontsize=9, color='#333', va='top',
+                            bbox=dict(facecolor='#f5f5f5', edgecolor='#ddd', boxstyle='round,pad=0.4'))
+                    ax.legend(loc='upper center', bbox_to_anchor=(0.5,-0.08),
+                              ncol=4, frameon=False, fontsize=9, labelcolor='#333')
+                    ax.set_title(f'Cuadrantes FeM — {mes_abr}', color='#222', fontsize=11)
+                    plt.tight_layout()
                     png_cuad = save_png(fig)
                     st.pyplot(fig); plt.close()
                     st.download_button("⬇️ PNG Cuadrantes", png_cuad,
-                                       f"cuadrantes_fem_mer_{mes_abr}.png",
-                                       "image/png", key="dl_png_cuad")
+                                       f"cuadrantes_fem_{mes_abr}.png", "image/png", key="dl_png_cuad")
+
+                with col_mx:
+                    orden_ow = ['mineral','esteril']
+                    ore_t_q  = CategoricalDtype(categories=orden_ow, ordered=True)
+                    union_q2 = union_q.copy()
+                    union_q2['ore_bin_mp'] = union_q2['ore_bin_mp'].astype(ore_t_q)
+                    union_q2['ore_bin_cp'] = union_q2['ore_bin_cp'].astype(ore_t_q)
+                    ct_ow = (pd.crosstab(union_q2['ore_bin_mp'], union_q2['ore_bin_cp'])
+                               .reindex(index=orden_ow[::-1], columns=orden_ow).fillna(0))
+                    ct_ow_pct = ct_ow.div(ct_ow.sum(axis=1), axis=0).mul(100).round(1).fillna(0)
+                    annot_ow  = (ct_ow.astype(int).apply(lambda c: c.map('{:,}'.format)).astype(str)
+                                 + '\n(' + ct_ow_pct.astype(str) + '%)')
+                    periodo_lbl_q = f"Ene–{mes_abr}" if periodo_q == "Acumulado" else mes_nombre
+                    fig2, ax2 = plt.subplots(figsize=(6, 5), facecolor='white')
+                    ax2.set_facecolor('white')
+                    sns.heatmap(ct_ow_pct, cmap=hmap_q_cmap, annot=annot_ow, fmt='',
+                                square=True, linewidths=0.5, cbar=True,
+                                annot_kws={'size':10}, ax=ax2)
+                    ax2.set_title(f'Ore/Waste — {periodo_lbl_q}', color='#222', pad=10)
+                    ax2.tick_params(colors='#333')
+                    ax2.set_xlabel('CP', color='#444'); ax2.set_ylabel('MP', color='#444')
+                    plt.tight_layout()
+                    png_ow = save_png(fig2)
+                    st.pyplot(fig2); plt.close()
+                    st.download_button("⬇️ PNG Ore/Waste", png_ow,
+                                       f"matriz_ow_{mes_abr}.png", "image/png", key="dl_png_ow")
+
+                if 'mineral' in ct_ow.index and 'mineral' in ct_ow.columns:
+                    TP = int(ct_ow.loc['mineral','mineral'])
+                    TN = int(ct_ow.loc['esteril','esteril']) if 'esteril' in ct_ow.index else 0
+                    FP = int(ct_ow.loc['esteril','mineral']) if 'esteril' in ct_ow.index else 0
+                    FN = int(ct_ow.loc['mineral','esteril']) if 'esteril' in ct_ow.columns else 0
+                    perd_v = FN/(TP+FN)*100 if (TP+FN) > 0 else 0
+                    gan_v  = FP/(TN+FP)*100 if (TN+FP) > 0 else 0
+                    r2 = st.columns(3)
+                    with r2[0]:
+                        st.markdown(_metric_html('Mineral Proyectado (MP)', f'{TP+FN:,}'), unsafe_allow_html=True)
+                    with r2[1]:
+                        st.markdown(_metric_html('Mineral Real (CP)', f'{TP+FP:,}'), unsafe_allow_html=True)
+                    with r2[2]:
+                        st.markdown(_metric_html('Pérdida (Min→Est)', f'{FN:,} ({perd_v:.1f}%)', 'red'), unsafe_allow_html=True)
+
+                with st.expander("📋 Ver tabla de conteos Ore/Waste"):
+                    ct_raw_ow = ct_ow.astype(int).copy()
+                    ct_raw_ow.index.name = 'MP \\ CP'; ct_raw_ow.columns.name = None
+                    st.dataframe(ct_raw_ow, use_container_width=True)
+
+                dl_ow1, dl_ow2, _ = st.columns([1,1,3])
+                with dl_ow1:
+                    st.download_button("⬇️ CSV Ore/Waste (%)", csv_bytes(ct_ow_pct.reset_index()),
+                                       f"ow_pct_{mes_abr}.csv", "text/csv", key="dl_ow_csv")
+                with dl_ow2:
+                    st.download_button("⬇️ CSV Conteos", csv_bytes(ct_raw_ow.reset_index()),
+                                       f"ow_raw_{mes_abr}.csv", "text/csv", key="dl_ow_raw")
 
         except Exception as e:
             st.error(f"Error en cuadrantes FeM: {e}")
 
 
+# ─────────────────────────────────────────────
+# TAB 7 — MATRIZ DE OCURRENCIA
+# ─────────────────────────────────────────────
 with tab7:
-    st.markdown("### Matrices de Cumplimiento")
+    st.markdown("### Matriz de Ocurrencia — Modelo Geológico")
+    st.markdown("*Certividad del modelo geológico: Ocurrencia MP vs CP.*")
+
     if df_mp.empty:
-        st.info("Carga los archivos MP para las matrices.")
+        st.info("Carga los archivos MP para la matriz de ocurrencia.")
     else:
-        tipo_m = st.radio("Tipo:", [
-            "Ocurrencia MP vs CP",
-            "Ore/Waste (binario)"
-        ], horizontal=True)
+        _mo1, _mo2 = st.columns(2)
+        with _mo1:
+            HEATMAP_PAL_O = {"Blues":"Blues","YlOrBr":"YlOrBr","Greens":"Greens",
+                             "Purples":"Purples","Oranges":"Oranges","RdYlGn":"RdYlGn",
+                             "viridis":"viridis","coolwarm":"coolwarm"}
+            hmap_o_lbl = st.selectbox("🎨 Paleta de colores", list(HEATMAP_PAL_O.keys()),
+                                      index=0, key="hmap_o")
+        with _mo2:
+            periodo_occ = st.radio("Período:",
+                                   ["Mes seleccionado", f"Acumulado (Ene–{mes_abr})"],
+                                   horizontal=True, key="r_mat_occ")
+        hmap_o_cmap = HEATMAP_PAL_O[hmap_o_lbl]
+        es_acum_occ = periodo_occ.startswith("Acum")
 
-        # Selector de paleta de colores para el heatmap
-        HEATMAP_PALETTES = {
-            "Blues":    "Blues",
-            "YlOrBr":   "YlOrBr",
-            "Greens":   "Greens",
-            "Purples":  "Purples",
-            "Oranges":  "Oranges",
-            "RdYlGn":   "RdYlGn",
-            "viridis":  "viridis",
-            "coolwarm": "coolwarm",
-        }
-        _hpal_col, _ = st.columns([1, 2])
-        with _hpal_col:
-            heatmap_palette_label = st.selectbox(
-                "🎨 Paleta de colores",
-                options=list(HEATMAP_PALETTES.keys()),
-                index=0,
-                key="heatmap_palette"
-            )
-        heatmap_cmap = HEATMAP_PALETTES[heatmap_palette_label]
-
-        arch       = f'output_mp_{mes}.csv'
-        df_mp_mes2 = df_mp[df_mp['ARCHIVO'] == arch].drop_duplicates('block_id')
-        df_cp_mes2 = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id')
-        min_proy   = None
-        min_real   = None
-
-        # NEW 3: selector de período para ambas matrices
-        periodo_mat = st.radio(
-            "Período:",
-            ["Mes seleccionado", f"Acumulado (Ene–{mes_abr})"],
-            horizontal=True, key="r_mat_periodo"
-        )
-        es_acumulado = periodo_mat.startswith("Acum")
+        arch_o    = f'output_mp_{mes}.csv'
+        df_mp_occ = df_mp[df_mp['ARCHIVO'] == arch_o].drop_duplicates('block_id')
+        df_cp_occ = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id')
 
         try:
-            if tipo_m == "Ocurrencia MP vs CP":
-                orden = ['bre','dis','gyd','est']
-                cat_t = CategoricalDtype(categories=orden, ordered=True)
+            orden = ['bre','dis','gyd','est']
+            cat_t = CategoricalDtype(categories=orden, ordered=True)
 
-                if es_acumulado:
-                    dmp_occ = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id')
-                    dcp_occ = df_cp[df_cp['extraccion'] <= mes].drop_duplicates('block_id')
-                else:
-                    dmp_occ = df_mp_mes2
-                    dcp_occ = df_cp_mes2
-
-                dmp = dmp_occ.assign(ocurrencia=lambda d: d['ocurrencia'].astype(cat_t))
-                dcp = dcp_occ.assign(ocurrencia=lambda d: d['ocurrencia'].astype(cat_t))
-                union = (
-                    dmp[['block_id','extraccion','ocurrencia',
-                          'proportional_volume','dim_x','dim_y','dim_z']]
-                    .merge(dcp[['block_id','extraccion','ocurrencia']],
-                           on=['block_id','extraccion'], suffixes=('_mp','_cp'))
-                    .query("proportional_volume >= 0.75 * dim_x * dim_y * dim_z")
-                )
-                ct = (pd.crosstab(union['ocurrencia_mp'], union['ocurrencia_cp'])
-                        .reindex(index=orden[::-1], columns=orden).fillna(0))
-
-            else:  # Binario
-                orden = ['mineral','esteril']
-                ore_t = CategoricalDtype(categories=orden, ordered=True)
-
-                if es_acumulado:
-                    dmp = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
-                    dcp = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy()
-                else:
-                    dmp = df_mp_mes2.copy()
-                    dcp = df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
-
-                dmp['ore_mp'] = dmp['ore_mp'].replace({'marginal':'esteril'}).astype(ore_t)
-                dcp['ore_cp'] = dcp['ore_cp'].replace({'marginal':'esteril'}).astype(ore_t)
-                union = (
-                    dmp[['block_id','extraccion','ore_mp',
-                          'proportional_volume','dim_x','dim_y','dim_z']]
-                    .merge(dcp[['block_id','extraccion','ore_cp']],
-                           on=['block_id','extraccion'])
-                )
-                union = union[union['proportional_volume'] >= 0.75*union['dim_x']*union['dim_y']*union['dim_z']]
-                ct = (pd.crosstab(union['ore_mp'], union['ore_cp'])
-                        .reindex(index=orden[::-1], columns=orden).fillna(0))
-                min_proy = int(ct.loc['mineral'].sum()) if 'mineral' in ct.index else 0
-                min_real = int(ct['mineral'].sum())     if 'mineral' in ct.columns else 0
-
-            # ── Métricas base ──
-            total_b  = int(ct.values.sum())
-            diag_b   = int(np.diag(ct.values).sum())
-            accuracy = diag_b / total_b * 100 if total_b > 0 else 0
-
-            if tipo_m == "Ore/Waste (binario)" and 'mineral' in ct.index and 'mineral' in ct.columns:
-                TP = int(ct.loc['mineral', 'mineral'])
-                TN = int(ct.loc['esteril', 'esteril']) if ('esteril' in ct.index and 'esteril' in ct.columns) else 0
-                FP = int(ct.loc['esteril', 'mineral']) if 'esteril' in ct.index else 0
-                FN = int(ct.loc['mineral', 'esteril']) if 'esteril' in ct.columns else 0
-
-                perdida_v  = FN / (TP + FN) * 100 if (TP + FN) > 0 else 0
-                ganancia_v = FP / (TN + FP) * 100 if (TN + FP) > 0 else 0
-
-                r1 = st.columns(3)
-                with r1[0]:
-                    st.markdown(_metric_html('Coincidencia Mineral', f'{TP:,}', 'green'), unsafe_allow_html=True)
-                with r1[1]:
-                    st.markdown(_metric_html('Coincidencia Estéril', f'{TN:,}', 'green'), unsafe_allow_html=True)
-                with r1[2]:
-                    st.markdown(_metric_html('Pérdida (Min→Est)', f'{FN:,} ({perdida_v:.1f}%)', 'red'), unsafe_allow_html=True)
-
-                r2 = st.columns(3)
-                with r2[0]:
-                    st.markdown(_metric_html('Ganancia (Est→Min)', f'{FP:,} ({ganancia_v:.1f}%)', 'blue'), unsafe_allow_html=True)
-                with r2[1]:
-                    st.markdown(_metric_html('Mineral Proyectado (MP)', f'{min_proy:,}' if min_proy is not None else '—'), unsafe_allow_html=True)
-                with r2[2]:
-                    st.markdown(_metric_html('Mineral Real (CP)', f'{min_real:,}' if min_real is not None else '—'), unsafe_allow_html=True)
-
+            if es_acum_occ:
+                dmp_occ = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id')
+                dcp_occ = df_cp[df_cp['extraccion'] <= mes].drop_duplicates('block_id')
             else:
-                # Ocurrencia: sin métricas adicionales
-                pass
+                dmp_occ = df_mp_occ
+                dcp_occ = df_cp_occ
 
-            # ── Heatmap ──
-            ct_pct = ct.div(ct.sum(axis=1), axis=0).mul(100).round(1).fillna(0)
-            annot  = (ct.astype(int).apply(lambda c: c.map('{:,}'.format)).astype(str)
-                      + '\n(' + ct_pct.astype(str) + '%)')
+            dmp = dmp_occ.assign(ocurrencia=lambda d: d['ocurrencia'].astype(cat_t))
+            dcp = dcp_occ.assign(ocurrencia=lambda d: d['ocurrencia'].astype(cat_t))
+            union_occ = (
+                dmp[['block_id','extraccion','ocurrencia',
+                      'proportional_volume','dim_x','dim_y','dim_z']]
+                .merge(dcp[['block_id','extraccion','ocurrencia']],
+                       on=['block_id','extraccion'], suffixes=('_mp','_cp'))
+                .query("proportional_volume >= 0.75 * dim_x * dim_y * dim_z")
+            )
+            ct_occ = (pd.crosstab(union_occ['ocurrencia_mp'], union_occ['ocurrencia_cp'])
+                        .reindex(index=orden[::-1], columns=orden).fillna(0))
+            ct_occ_pct = ct_occ.div(ct_occ.sum(axis=1), axis=0).mul(100).round(1).fillna(0)
+            annot_occ  = (ct_occ.astype(int).apply(lambda c: c.map('{:,}'.format)).astype(str)
+                          + '\n(' + ct_occ_pct.astype(str) + '%)')
 
-            periodo_lbl = f"Ene–{mes_abr}" if es_acumulado else mes_nombre
+            periodo_lbl_o = f"Ene–{mes_abr}" if es_acum_occ else mes_nombre
             fig, ax = plt.subplots(figsize=(6, 5), facecolor='white')
             ax.set_facecolor('white')
-            sns.heatmap(ct_pct, cmap=heatmap_cmap, annot=annot, fmt='',
+            sns.heatmap(ct_occ_pct, cmap=hmap_o_cmap, annot=annot_occ, fmt='',
                         square=True, linewidths=0.5, cbar=True,
                         annot_kws={'size':10}, ax=ax)
-            ax.set_title(f'Cumplimiento — {periodo_lbl}', color='#222', pad=10)
+            ax.set_title(f'Ocurrencia MP vs CP — {periodo_lbl_o}', color='#222', pad=10)
             ax.tick_params(colors='#333')
-            ax.set_xlabel('CP', color='#444'); ax.set_ylabel('MP', color='#444')
+            ax.set_xlabel('Ocurrencia CP', color='#444')
+            ax.set_ylabel('Ocurrencia MP', color='#444')
             plt.tight_layout()
 
-            col_m, _ = st.columns([1, 1])
-            with col_m:
-                png_mat = save_png(fig)
+            col_o, _ = st.columns([1, 1])
+            with col_o:
+                png_occ = save_png(fig)
                 st.pyplot(fig); plt.close()
-                st.download_button("⬇️ PNG Matriz", png_mat,
-                                   f"matriz_{mes_abr}.png", "image/png", key="dl_png_matriz")
+                st.download_button("⬇️ PNG Ocurrencia", png_occ,
+                                   f"matriz_occ_{mes_abr}.png", "image/png", key="dl_png_occ")
 
-            # Tabla de conteos raw expandible
             with st.expander("📋 Ver tabla de conteos"):
-                ct_raw = ct.astype(int).copy()
-                ct_raw.index.name   = 'MP \\ CP'
-                ct_raw.columns.name = None
-                st.dataframe(ct_raw, use_container_width=True)
+                ct_raw_occ = ct_occ.astype(int).copy()
+                ct_raw_occ.index.name = 'MP \\ CP'; ct_raw_occ.columns.name = None
+                st.dataframe(ct_raw_occ, use_container_width=True)
 
-            dl_m1, dl_m2, _ = st.columns([1, 1, 3])
-            with dl_m1:
-                st.download_button("⬇️ CSV Matriz (%)", csv_bytes(ct_pct.reset_index()),
-                                   f"matriz_pct_{mes_abr}.csv", "text/csv", key="dl_mat_csv")
-            with dl_m2:
-                st.download_button("⬇️ CSV Conteos", csv_bytes(ct_raw.reset_index()),
-                                   f"matriz_raw_{mes_abr}.csv", "text/csv", key="dl_mat_raw_csv")
+            dl_o1, dl_o2, _ = st.columns([1,1,3])
+            with dl_o1:
+                st.download_button("⬇️ CSV Ocurrencia (%)", csv_bytes(ct_occ_pct.reset_index()),
+                                   f"occ_pct_{mes_abr}.csv", "text/csv", key="dl_occ_csv")
+            with dl_o2:
+                st.download_button("⬇️ CSV Conteos", csv_bytes(ct_raw_occ.reset_index()),
+                                   f"occ_raw_{mes_abr}.csv", "text/csv", key="dl_occ_raw")
 
         except Exception as e:
-            st.error(f"Error en matriz: {e}")
+            st.error(f"Error en matriz de ocurrencia: {e}")
