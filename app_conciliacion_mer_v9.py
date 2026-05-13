@@ -440,9 +440,9 @@ mes_row   = _mes_rows if not _mes_rows.empty else tabla_mensual[tabla_mensual['m
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Balance", "📈 Gráficos", "🗺️ Visualización",
-    "🌊 Cascadas", "🔬 Dispersión", "🧮 Matrices"
+    "🌊 Cascadas", "🔬 Dispersión", "📐 Cuadrantes FeM", "🧮 Matrices"
 ])
 
 # ─────────────────────────────────────────────
@@ -962,13 +962,14 @@ with tab4:
                 title_text="Tonelaje (kt)",
                 range=yrange,
                 tickformat=",d",
-                gridcolor='#eee',
+                showgrid=False,
                 zerolinecolor='#ccc',
                 tickfont=dict(color='#000000', size=12),
                 title_font=dict(color='#000000', size=12)
             )
             fw.update_xaxes(
-                tickfont=dict(color='#000000', size=12)
+                tickfont=dict(color='#000000', size=12),
+                showgrid=False
             )
             return fw, df_res
 
@@ -1156,6 +1157,135 @@ with tab5:
 # NEW 3: opción acumulado para matriz binaria
 # ─────────────────────────────────────────────
 with tab6:
+    st.markdown("### Conciliación por Cuadrantes FeM")
+    st.markdown("*Análisis de coincidencia, pérdida y ganancia sobre corte FeM.*")
+
+    if df_mp.empty:
+        st.info("Carga los archivos MP para el análisis de cuadrantes.")
+    else:
+        cq1, cq2, cq3 = st.columns(3)
+        with cq1:
+            cutoff_fem_q = st.number_input("Corte FeM (%)", value=20.0, step=0.5, key="cutoff_fem_q")
+        with cq2:
+            ue_q = st.selectbox("UE_FE", [1, 2, 3], index=0, key="ue_q")
+        with cq3:
+            periodo_q = st.radio("Período:", ["Mes", "Acumulado"], horizontal=True, key="periodo_q")
+
+        try:
+            arch_q  = f'output_mp_{mes}.csv'
+            df_mp_q = df_mp[df_mp['ARCHIVO'] == arch_q].drop_duplicates('block_id').copy()
+            df_cp_q = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id').copy()
+
+            if periodo_q == "Acumulado":
+                df_mp_q = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                df_cp_q = df_cp[df_cp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+
+            # Reclasificar marginal → esteril para análisis binario
+            df_mp_q['ore_bin'] = df_mp_q['ore_mp'].replace({'marginal': 'esteril'})
+            df_cp_q['ore_bin'] = df_cp_q['ore_cp'].replace({'marginal': 'esteril'})
+
+            # Merge y filtro volumen
+            union_q = pd.merge(
+                df_mp_q[['block_id', 'extraccion', 'ore_bin',
+                          'proportional_volume', 'dim_x', 'dim_y', 'dim_z', 'fem']],
+                df_cp_q[['block_id', 'extraccion', 'ore_bin', 'fem']],
+                on=['block_id', 'extraccion'], suffixes=('_mp', '_cp')
+            )
+            union_q = union_q[
+                union_q['proportional_volume'] >= 0.75 * union_q['dim_x'] *
+                union_q['dim_y'] * union_q['dim_z']
+            ].copy()
+
+            merged_q = pd.merge(df_cp_q, df_mp_q, on='block_id', suffixes=('_cp', '_mp'))
+            if 'ue_fe_cp' in merged_q.columns and 'ue_fe_mp' in merged_q.columns:
+                df_base = merged_q[
+                    (merged_q['ue_fe_cp'] == ue_q) & (merged_q['ue_fe_mp'] == ue_q)
+                ][['fem_cp', 'fem_mp']].dropna().copy()
+            else:
+                df_base = merged_q[['fem_cp', 'fem_mp']].dropna().copy()
+
+            if df_base.empty:
+                st.warning("Sin datos suficientes para el análisis de cuadrantes.")
+            else:
+                pr_q, _ = pearsonr(df_base['fem_cp'], df_base['fem_mp'])
+
+                coincidencia = (df_base['fem_cp'] >= cutoff_fem_q) & (df_base['fem_mp'] >= cutoff_fem_q)
+                perdida      = (df_base['fem_cp'] <  cutoff_fem_q) & (df_base['fem_mp'] >= cutoff_fem_q)
+                esteril_q    = (df_base['fem_cp'] <  cutoff_fem_q) & (df_base['fem_mp'] <  cutoff_fem_q)
+                ganancia     = (df_base['fem_cp'] >= cutoff_fem_q) & (df_base['fem_mp'] <  cutoff_fem_q)
+
+                conteos = {
+                    "I":   int(coincidencia.sum()),
+                    "II":  int(perdida.sum()),
+                    "III": int(esteril_q.sum()),
+                    "IV":  int(ganancia.sum()),
+                }
+
+                r1 = st.columns(4)
+                for col_w, (lbl, val), cls in zip(r1,
+                    [("Coincidencia Mineral (I)", conteos["I"]),
+                     ("Pérdida Mineral (II)",     conteos["II"]),
+                     ("Coincidencia Estéril (III)",conteos["III"]),
+                     ("Ganancia Mineral (IV)",    conteos["IV"])],
+                    ['green','red','','blue']):
+                    with col_w:
+                        st.markdown(_metric_html(lbl, f'{val:,}', cls), unsafe_allow_html=True)
+
+                max_fem = max(df_base['fem_cp'].max(), df_base['fem_mp'].max()) * 1.05
+                fig, ax = make_fig((6, 6))
+
+                ax.plot([0, max_fem], [0, max_fem], color='black', lw=1)
+                ax.axvline(cutoff_fem_q, ls='--', color='black', lw=1)
+                ax.axhline(cutoff_fem_q, ls='--', color='black', lw=1)
+
+                ax.scatter(df_base.loc[esteril_q,   'fem_cp'], df_base.loc[esteril_q,   'fem_mp'],
+                           s=18, color='#d9d9d9', label='Estéril', alpha=0.8)
+                ax.scatter(df_base.loc[coincidencia,'fem_cp'], df_base.loc[coincidencia,'fem_mp'],
+                           s=18, color='#2ca02c', label='Coincidencia', alpha=0.8)
+                ax.scatter(df_base.loc[perdida,     'fem_cp'], df_base.loc[perdida,     'fem_mp'],
+                           s=18, color='#ff7f0e', label='Pérdida', alpha=0.8)
+                ax.scatter(df_base.loc[ganancia,    'fem_cp'], df_base.loc[ganancia,    'fem_mp'],
+                           s=18, color='#1f77b4', label='Ganancia', alpha=0.8)
+
+                ax.set_xlim(0, max_fem); ax.set_ylim(0, max_fem)
+                ax.set_xlabel('FeM CP (%)', color='#444')
+                ax.set_ylabel('FeM MP (%)', color='#444')
+                style_ax(ax)
+
+                mid = max_fem * 0.75
+                low = max_fem * 0.15
+                for txt, xp, yp in [('I', mid, mid*0.45), ('II', low, mid*0.45),
+                                     ('III', low, low*0.45), ('IV', mid, low*0.45)]:
+                    ax.text(xp, yp, txt, fontsize=12, weight='bold', color='#444')
+
+                ax.text(0.05, 0.95,
+                        f'UE_FE = {ue_q} · {mes_abr}\n'
+                        f'Coef. Pearson: {pr_q:.3f}\n'
+                        f'Coincidencia (I): {conteos["I"]:,}\n'
+                        f'Pérdida (II): {conteos["II"]:,}\n'
+                        f'Estéril (III): {conteos["III"]:,}\n'
+                        f'Ganancia (IV): {conteos["IV"]:,}',
+                        transform=ax.transAxes, fontsize=9, color='#333', va='top',
+                        bbox=dict(facecolor='#f5f5f5', edgecolor='#ddd', boxstyle='round,pad=0.4'))
+
+                ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.08),
+                          ncol=4, frameon=False, fontsize=9, labelcolor='#333')
+                ax.set_title(f'Conciliación FeM MP–CP — {mes_abr}', color='#222', fontsize=11)
+                plt.tight_layout()
+
+                cq_col, _ = st.columns([1, 1])
+                with cq_col:
+                    png_cuad = save_png(fig)
+                    st.pyplot(fig); plt.close()
+                    st.download_button("⬇️ PNG Cuadrantes", png_cuad,
+                                       f"cuadrantes_fem_mer_{mes_abr}.png",
+                                       "image/png", key="dl_png_cuad")
+
+        except Exception as e:
+            st.error(f"Error en cuadrantes FeM: {e}")
+
+
+with tab7:
     st.markdown("### Matrices de Cumplimiento")
     if df_mp.empty:
         st.info("Carga los archivos MP para las matrices.")
