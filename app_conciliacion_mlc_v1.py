@@ -41,7 +41,7 @@ st.set_page_config(
 MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
          7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'}
 
-VARS_CALIDAD    = ['fe', 'fem', 'fedtt', 'dtt', 'p', 's']
+VARS_CALIDAD    = ['fe', 'fem', 'fedtt', 'dtt', 'p', 's', 'sio2', 'al2o3', 'v', 'axb', 'bwi_cab', 'bwi_conc']
 OCURRENCIAS_MLC = ['mac', 'bre', 'gyd', 'est']
 FASES_MLC       = ['f6a', 'f6b', 'fde']
 
