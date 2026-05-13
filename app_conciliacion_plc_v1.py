@@ -764,7 +764,7 @@ with tab3:
         st.info("Carga los archivos MP mensuales para ver la visualización de bloques.")
     else:
         tipo_mapa  = st.selectbox("Visualizar por:", ["Clasificación (Ore)", "Ocurrencia", "Ley Fe"])
-        tam_bloque = st.slider("Tamaño de bloque (m)", 5, 25, 10)
+        tam_bloque = st.slider("Tamaño de bloque (m)", 3, 15, 5)  # PLC: bloques 5x5x5
 
         cv1, cv2 = st.columns(2)
         with cv1:
@@ -775,14 +775,24 @@ with tab3:
 
         cg2, cg3 = st.columns(2)
         with cg2:
-            grid_x = st.number_input("Espaciado grilla X (m)", value=20, step=5, min_value=5)
+            grid_x = st.number_input("Espaciado grilla X (m)", value=50, step=10, min_value=5)
         with cg3:
-            grid_y = st.number_input("Espaciado grilla Y (m)", value=20, step=5, min_value=5)
+            grid_y = st.number_input("Espaciado grilla Y (m)", value=50, step=10, min_value=5)
 
         try:
-            cota       = df_mp.loc[df_mp['extraccion'] == mes, 'centroid_z'].min() + 12.5
-            banco_real = cota - 6.25
-            df_mp_cota = df_mp[(df_mp['centroid_z'] == cota) & (df_mp['extraccion'] <= mes)].copy()
+            # PLC: bench_height=5, bloques 5x5x5
+            BENCH_HEIGHT_PLC = 5.0
+            HALF_BENCH       = BENCH_HEIGHT_PLC / 2  # 2.5
+
+            # Obtener la cota mínima del mes y redondear al banco más cercano
+            z_min = df_mp.loc[df_mp['extraccion'] == mes, 'centroid_z'].min()
+            # centroid_z ya es el centro del bloque, no necesita ajuste
+            cota       = z_min
+            banco_real = cota
+            df_mp_cota = df_mp[
+                (np.abs(df_mp['centroid_z'] - cota) < HALF_BENCH + 0.01) &
+                (df_mp['extraccion'] <= mes)
+            ].copy()
             df_cp_cota = df.merge(
                 df_mp_cota[['centroid_x','centroid_y','centroid_z']],
                 on=['centroid_x','centroid_y','centroid_z'], how='inner'
