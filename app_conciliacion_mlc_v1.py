@@ -339,17 +339,26 @@ def build_tabla_mlc(df, cutoff_fem, ocu_sel=None):
 
     def agg_grupo(df_in, ore_col, ton_col, ocu_col, suf):
         mask = filtro_ore(df_in, ore_col, ocu_col)
+        df_fil = df_in[mask]
+        if df_fil.empty or ore_col not in df_fil.columns:
+            return pd.DataFrame(columns=['periodo'])
+
+        def _pond(x, col, ton):
+            if col not in x.columns or ton not in x.columns:
+                return np.nan
+            return ponderado(x, col, ton)
+
         return (
-            df_in[mask].groupby('periodo', group_keys=False)
+            df_fil.groupby('periodo', group_keys=False)
             .apply(lambda x: pd.Series({
-                f'fe{suf}':       ponderado(x, f'fe{suf}',    ton_col),
-                f'fem{suf}':      ponderado(x, f'fem{suf}',   ton_col),
-                f'fedtt{suf}':    ponderado(x, f'fedtt{suf}', ton_col),
-                f'dtt{suf}':      ponderado(x, f'dtt{suf}',   ton_col),
-                f'p{suf}':        ponderado(x, f'p{suf}',     ton_col),
-                f's{suf}':        ponderado(x, f's{suf}',     ton_col),
-                f'volumen{suf}':  x['proportional_volume'].sum() if 'proportional_volume' in x else np.nan,
-                f'tonelaje{suf}': x[ton_col].sum() / 1_000,
+                f'fe{suf}':       _pond(x, f'fe{suf}',    ton_col),
+                f'fem{suf}':      _pond(x, f'fem{suf}',   ton_col),
+                f'fedtt{suf}':    _pond(x, f'fedtt{suf}', ton_col),
+                f'dtt{suf}':      _pond(x, f'dtt{suf}',   ton_col),
+                f'p{suf}':        _pond(x, f'p{suf}',     ton_col),
+                f's{suf}':        _pond(x, f's{suf}',     ton_col),
+                f'volumen{suf}':  float(x['proportional_volume'].sum()) if 'proportional_volume' in x.columns else np.nan,
+                f'tonelaje{suf}': float(x[ton_col].sum()) / 1_000 if ton_col in x.columns else np.nan,
             }), include_groups=False)
             .reset_index()
         )
