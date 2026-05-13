@@ -115,21 +115,25 @@ COLS_SUFIJO = [
 
 
 def leer_csv_mlc(uploaded_file):
-    """Lectura CSV formato Vulcan. Optimizado: usecols + float32 + category."""
+    """Lectura CSV formato Vulcan. Optimizado: usecols por nombre + float32 + category."""
     try:
+        # Leer fila de encabezado para obtener nombres de columnas
         header_df = pd.read_csv(uploaded_file, nrows=1, header=None, encoding='latin1')
         uploaded_file.seek(0)
         col_names = [str(c).strip().lower() for c in header_df.iloc[0].tolist()]
 
-        cols_usar = [c for c in COLS_BASE if c in col_names]
-        col_idx   = [col_names.index(c) for c in cols_usar]
-        dtype_map = {c: 'float32' for c in COLS_F32 if c in cols_usar}
+        # Columnas a leer: intersección con las disponibles
+        cols_usar  = [c for c in COLS_BASE if c in col_names]
+        dtype_map  = {c: 'float32' for c in COLS_F32 if c in cols_usar}
 
         try:
+            # skiprows=4, usar nombres directamente con header=None
             df = pd.read_csv(
                 uploaded_file, skiprows=4, header=None,
-                names=col_names, usecols=col_idx,
-                dtype=dtype_map, low_memory=False, encoding='latin1'
+                names=col_names,          # nombres de todas las columnas
+                usecols=cols_usar,        # leer solo las necesarias (por nombre)
+                dtype=dtype_map,
+                low_memory=False, encoding='latin1'
             )
         except Exception:
             uploaded_file.seek(0)
@@ -186,6 +190,8 @@ def cargar_datos_mlc(lp_files_bytes, mp_files_bytes, cp_files_bytes,
 
     # Merge liviano: solo columnas útiles con sufijo
     def _preparar_sufijo(df_src, suf):
+        if 'id' not in df_src.columns:
+            raise ValueError(f"Columna 'id' no encontrada. Verifica que los archivos tengan 'block_id'.")
         cols_disp = [c for c in COLS_SUFIJO if c in df_src.columns]
         rename_map = {c: f"{c}{suf}" for c in cols_disp}
         return df_src[['id'] + cols_disp].rename(columns=rename_map)
