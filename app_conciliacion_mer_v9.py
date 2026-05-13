@@ -941,9 +941,9 @@ with tab4:
                 text=[f"{v:,.1f}" for v in vals],
                 textposition="outside",
                 y=vals,
-                increasing={"marker": {"color": "#2196F3", "opacity": 1}},
-                decreasing={"marker": {"color": "#EF5350", "opacity": 1}},
-                totals={"marker":     {"color": "#42A5F5", "opacity": 1}},
+                increasing={"marker": {"color": "#2196F3"}},
+                decreasing={"marker": {"color": "#EF5350"}},
+                totals={"marker":     {"color": "#42A5F5"}},
                 connector={"line": {"color": "#999", "width": 1}},
             ))
             fw.update_layout(
