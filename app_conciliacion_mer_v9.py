@@ -901,7 +901,7 @@ with tab4:
         )
 
         # NEW 1: cascada retorna (figura, tabla_resumen)
-        def cascada(df_sel, lbl_proy, lbl_real, title):
+        def cascada(df_sel, lbl_proy, lbl_real, title, yrange=None):
             def ton(mask, col='tonelaje'):
                 sub = df_sel[mask]
                 return sub[col].sum() / 1000 if col in sub.columns else 0
@@ -941,6 +941,10 @@ with tab4:
                 text=[f"{v:,.1f}" for v in vals],
                 textposition="outside",
                 y=vals,
+                increasing={"marker": {"color": "#2196F3", "opacity": 1}},
+                decreasing={"marker": {"color": "#EF5350", "opacity": 1}},
+                totals={"marker":     {"color": "#42A5F5", "opacity": 1}},
+                connector={"line": {"color": "#999", "width": 1}},
             ))
             fw.update_layout(
                 title=dict(
@@ -949,13 +953,14 @@ with tab4:
                     x=0.0, xanchor='left'
                 ),
                 paper_bgcolor='white',
-                plot_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='white',
                 font=dict(color='#000000', size=14),
                 height=420,
                 margin=dict(t=80, b=60, l=60, r=30)
             )
             fw.update_yaxes(
                 title_text="Tonelaje (kt)",
+                range=yrange,
                 tickformat=",d",
                 gridcolor='#eee',
                 zerolinecolor='#ccc',
@@ -985,6 +990,11 @@ with tab4:
         # ── Cascada Mensual ──
         st.markdown("#### Cascada Mensual")
         modelo_casc_mes = st.radio("Modelo vs CP:", ["MP", "LP"], horizontal=True, key="r_casc_mes")
+        _cm1, _cm2, _ = st.columns([1, 1, 3])
+        with _cm1:
+            casc_mes_ymin = st.number_input("Ton. mín (kt)", value=0,   step=50, key="casc_mes_ymin")
+        with _cm2:
+            casc_mes_ymax = st.number_input("Ton. máx (kt)", value=400, step=50, key="casc_mes_ymax")
 
         if modelo_casc_mes == "MP":
             df_casc_mes  = df_mes_sel
@@ -1007,7 +1017,8 @@ with tab4:
             lbl_proy_mes = f"Budget LP {mes_abr}"
 
         fig_c1, df_res_c1 = cascada(df_casc_mes, lbl_proy_mes, f"Real CP {mes_abr}",
-                                     f"Conciliación Mensual MER — {mes_abr} ({modelo_casc_mes} vs CP)")
+                                     f"Conciliación Mensual MER — {mes_abr} ({modelo_casc_mes} vs CP)",
+                                     yrange=[casc_mes_ymin, casc_mes_ymax])
         st.plotly_chart(fig_c1, use_container_width=True)
 
         # NEW 1: tabla resumen cascada mensual
@@ -1035,6 +1046,11 @@ with tab4:
         # ── Cascada Acumulada ──
         st.markdown("#### Cascada Acumulada")
         modelo_casc_acum = st.radio("Modelo vs CP:", ["MP", "LP"], horizontal=True, key="r_casc_acum")
+        _ca1, _ca2, _ = st.columns([1, 1, 3])
+        with _ca1:
+            casc_acum_ymin = st.number_input("Ton. mín (kt)", value=0,    step=50, key="casc_acum_ymin")
+        with _ca2:
+            casc_acum_ymax = st.number_input("Ton. máx (kt)", value=1200, step=50, key="casc_acum_ymax")
 
         if modelo_casc_acum == "MP":
             df_casc_acum  = conc_mp[conc_mp['extraccion'] > 0]
@@ -1044,7 +1060,8 @@ with tab4:
             lbl_proy_acum = "Budget LP acum."
 
         fig_c2, df_res_c2 = cascada(df_casc_acum, lbl_proy_acum, "Real CP acum.",
-                                     f"Conciliación Acumulada MER — hasta {mes_abr} ({modelo_casc_acum} vs CP)")
+                                     f"Conciliación Acumulada MER — hasta {mes_abr} ({modelo_casc_acum} vs CP)",
+                                     yrange=[casc_acum_ymin, casc_acum_ymax])
         st.plotly_chart(fig_c2, use_container_width=True)
 
         # NEW 1: tabla resumen cascada acumulada
