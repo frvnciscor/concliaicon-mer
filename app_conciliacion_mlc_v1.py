@@ -23,7 +23,7 @@ FASES_MLC = ['f6a','f6b','fde']
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&family=Poppins:wght@600;700&display=swap');
 html,body,[class*="css"]{font-family:'IBM Plex Sans',sans-serif;}
 .stApp{background-color:#0f1117;color:#e0e0e0;}
 h1,h2,h3{font-family:'IBM Plex Mono',monospace;color:#f0c040;}
@@ -33,9 +33,11 @@ h1,h2,h3{font-family:'IBM Plex Mono',monospace;color:#f0c040;}
 .metric-card.blue{border-left-color:#6699ff;}
 .metric-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;
               font-family:'IBM Plex Mono',monospace;}
-.metric-value{font-size:22px;font-weight:600;color:#f0c040;font-family:'IBM Plex Mono',monospace;}
+.metric-value{font-size:24px;font-weight:700;color:#f0c040;font-family:'Poppins',sans-serif;}
 .metric-value.red{color:#cc4444;}.metric-value.green{color:#44aa66;}.metric-value.blue{color:#6699ff;}
 .metric-sub{font-size:12px;color:#777;font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+.metric-dev{font-size:12px;font-family:'Poppins',sans-serif;font-weight:600;margin-top:4px;}
+.metric-dev.pos{color:#44aa66;}.metric-dev.neg{color:#cc4444;}.metric-dev.neu{color:#888;}
 .stTabs [data-baseweb="tab"]{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#888;}
 .stTabs [aria-selected="true"]{color:#f0c040!important;border-bottom:2px solid #f0c040!important;}
 .cutoff-box{background:#1a1d27;border:1px solid #2a2d3a;border-left:3px solid #6699ff;
@@ -160,9 +162,34 @@ with st.sidebar:
     with c2: mes=st.selectbox("Mes",list(MESES.keys()),format_func=lambda x:MESES[x],index=0)
     st.markdown("---")
     st.markdown("### ✂️ Ley de Corte")
-    cutoff_fem=st.number_input("Corte FeM (%)",value=28.0,step=0.5,key="lc_fem")
-    cutoff_str=f"FeM ≥ {cutoff_fem}%"
-    st.markdown(f"<div class='cutoff-box'>🎯 {cutoff_str}</div>",unsafe_allow_html=True)
+    VARS_CORTE = ['fem','fe','fedtt','dtt','p','s','sio2','al2o3','ue_fe']
+    OPS = ['>=','<=','>','<']
+    n_crit = st.number_input("Número de criterios", min_value=1, max_value=4, value=1, step=1)
+    DEFAULTS = [
+        {'var':'fem',  'op':'>=','val':28.0},
+        {'var':'fe',   'op':'>=','val':0.0},
+        {'var':'fedtt','op':'>=','val':0.0},
+        {'var':'dtt',  'op':'>=','val':0.0},
+    ]
+    criterios = []
+    for i in range(int(n_crit)):
+        d = DEFAULTS[i] if i < len(DEFAULTS) else {'var':'fem','op':'>=','val':0.0}
+        st.markdown(f"**Criterio {i+1}**")
+        ca_c, cb_c, cc_c = st.columns([2,1,1.5])
+        with ca_c:
+            var = st.selectbox("Var", VARS_CORTE,
+                               index=VARS_CORTE.index(d['var']) if d['var'] in VARS_CORTE else 0,
+                               key=f"mlc_var_{i}", label_visibility="collapsed")
+        with cb_c:
+            op = st.selectbox("Op", OPS, index=OPS.index(d['op']),
+                              key=f"mlc_op_{i}", label_visibility="collapsed")
+        with cc_c:
+            val = st.number_input("Val", value=d['val'], step=0.5,
+                                  key=f"mlc_val_{i}", label_visibility="collapsed")
+        criterios.append({'var':var,'op':op,'val':val})
+    cutoff_str = " AND ".join([f"{c['var']} {c['op']} {c['val']}" for c in criterios])
+    cutoff_fem = next((c['val'] for c in criterios if c['var']=='fem'), 28.0)
+    st.markdown(f"<div class='cutoff-box'>🎯 {cutoff_str}</div>", unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("### 📐 Variable de calidad")
     var_cal=st.selectbox("Eje secundario",VARS_CALIDAD,format_func=str.upper)
@@ -170,12 +197,12 @@ with st.sidebar:
     target_ton=st.number_input("🎯 Objetivo anual (kt)",value=0,step=100,min_value=0)
     st.markdown("---")
 
-# ─── CARGA DE DATOS ───
+# ─── CARGA DE DATOS — separada de clasificación ───
 @st.cache_data(show_spinner=False)
-def cargar(lp_b, mp_b, cp_b, modo_fase_k, fase_k, cutoff, _cache_key=None):
+def cargar_raw(lp_b, mp_b, cp_b, modo_fase_k, fase_k, _cache_key=None):
     """
-    _cache_key: tupla con (nombre, tamaño) de cada archivo.
-    Fuerza recalculo cuando el usuario sube archivos modificados con el mismo nombre.
+    Solo lee, mergea y libera memoria. NO clasifica ore.
+    Así cambiar la ley de corte no recarga los 36 archivos.
     """
     def leer_grupo(files_b):
         out = pd.DataFrame()
@@ -192,12 +219,11 @@ def cargar(lp_b, mp_b, cp_b, modo_fase_k, fase_k, cutoff, _cache_key=None):
         return out
 
     df_lp = leer_grupo(lp_b)
-    df_mp = leer_grupo(mp_b)
-    df_cp = leer_grupo(cp_b)
-
+    df_mp  = leer_grupo(mp_b)
+    df_cp  = leer_grupo(cp_b)
     if df_lp.empty: return pd.DataFrame()
 
-    # Filtro por fase (Cell 9)
+    # Filtro por fase
     if modo_fase_k == "Por fase" and fase_k:
         for d in [df_lp, df_mp, df_cp]:
             if 'fase' in d.columns:
@@ -208,33 +234,13 @@ def cargar(lp_b, mp_b, cp_b, modo_fase_k, fase_k, cutoff, _cache_key=None):
     df_cp_ren = df_cp.add_suffix('_cp'); df_cp_ren['id'] = df_cp['id']
     df = df_lp.merge(df_mp_ren, on='id', how='outer')
     df = df.merge(df_cp_ren, on='id', how='outer')
-
-    # Liberar DataFrames intermedios
     del df_lp, df_mp, df_cp, df_mp_ren, df_cp_ren
 
     # Drop columnas innecesarias post-merge
     cols_to_drop = [c for c in COLS_DROP_POST_MERGE if c in df.columns]
-    if cols_to_drop:
-        df.drop(columns=cols_to_drop, inplace=True)
+    if cols_to_drop: df.drop(columns=cols_to_drop, inplace=True)
 
-    # Clasificación ore (Cell 11) — vectorizada
-    for ue_col, fem_col, ore_col in [
-        ('ue_fe',    'fem',    'ore_lp'),
-        ('ue_fe_mp', 'fem_mp', 'ore_mp'),
-        ('ue_fe_cp', 'fem_cp', 'ore_cp'),
-    ]:
-        ue  = pd.to_numeric(df.get(ue_col,  pd.Series(0,      index=df.index)), errors='coerce').fillna(0)
-        fem = pd.to_numeric(df.get(fem_col, pd.Series(np.nan, index=df.index)), errors='coerce').fillna(0)
-        ore = pd.Series('esteril', index=df.index)
-        ore[ue >= 1] = 'marginal'
-        ore[(ue >= 1) & (fem >= cutoff)] = 'mineral'
-        df[ore_col] = ore
-
-    # Conciliacion (Cell 11,12)
-    df['conciliacion']    = df['ore_mp'] + '_' + df['ore_cp']
-    df['conciliacion_lp'] = df['ore_lp'] + '_' + df['ore_cp']
-
-    # Tonelajes (Cell 14) — proportional_volume sin sufijo para los 3
+    # Tonelajes (Cell 14) — proportional_volume sin sufijo
     pv = 'proportional_volume'
     if 'densidad'    in df.columns and pv in df.columns:
         df['tonelaje']    = pd.to_numeric(df['densidad'],    errors='coerce') * pd.to_numeric(df[pv], errors='coerce')
@@ -249,6 +255,54 @@ def cargar(lp_b, mp_b, cp_b, modo_fase_k, fase_k, cutoff, _cache_key=None):
 
     return df
 
+
+def clasificar(df, criterios):
+    """
+    Clasificación ore en tiempo real — no está en cache.
+    Criterios dinámicos: lista de {'var','op','val'}.
+    ue_fe >= 1 siempre requerido + todos los criterios adicionales.
+    """
+    df = df.copy()
+
+    def _evaluar(row_ue, row_fem_dict, crit):
+        """Evalúa todos los criterios sobre columnas del df."""
+        resultados = []
+        for c in crit:
+            col = row_fem_dict.get(c['var'])
+            if col is None: resultados.append(False); continue
+            val = pd.to_numeric(col, errors='coerce').fillna(0)
+            op = c['op']
+            if   op == '>=': resultados.append(val >= c['val'])
+            elif op == '<=': resultados.append(val <= c['val'])
+            elif op == '>':  resultados.append(val >  c['val'])
+            elif op == '<':  resultados.append(val <  c['val'])
+        return resultados
+
+    for suf, ue_col, ore_col in [('', 'ue_fe', 'ore_lp'),
+                                  ('_mp', 'ue_fe_mp', 'ore_mp'),
+                                  ('_cp', 'ue_fe_cp', 'ore_cp')]:
+        ue = pd.to_numeric(df.get(ue_col, pd.Series(0, index=df.index)), errors='coerce').fillna(0)
+        ore = pd.Series('esteril', index=df.index)
+        ore[ue >= 1] = 'marginal'
+
+        # Evaluar todos los criterios
+        mask_mineral = ue >= 1
+        for c in criterios:
+            col_name = f"{c['var']}{suf}"
+            if col_name not in df.columns: mask_mineral = pd.Series(False, index=df.index); break
+            val = pd.to_numeric(df[col_name], errors='coerce').fillna(0)
+            op = c['op']
+            if   op == '>=': mask_mineral = mask_mineral & (val >= c['val'])
+            elif op == '<=': mask_mineral = mask_mineral & (val <= c['val'])
+            elif op == '>':  mask_mineral = mask_mineral & (val >  c['val'])
+            elif op == '<':  mask_mineral = mask_mineral & (val <  c['val'])
+        ore[mask_mineral] = 'mineral'
+        df[ore_col] = ore
+
+    df['conciliacion']    = df['ore_mp'] + '_' + df['ore_cp']
+    df['conciliacion_lp'] = df['ore_lp'] + '_' + df['ore_cp']
+    return df
+
 # ─── MAIN ───
 st.markdown("# Conciliación Mensual · Mina Los Colorados")
 
@@ -261,7 +315,6 @@ lp_b = [(f.name, f.read()) for f in files_lp]
 mp_b = [(f.name, f.read()) for f in files_mp]
 cp_b = [(f.name, f.read()) for f in files_cp]
 
-# Hash de cache: (nombre, tamaño) por archivo — detecta archivos modificados con mismo nombre
 cache_key = (
     tuple((f.name, len(c)) for f,(_,c) in zip(files_lp, lp_b)),
     tuple((f.name, len(c)) for f,(_,c) in zip(files_mp, mp_b)),
@@ -269,9 +322,12 @@ cache_key = (
 )
 
 with st.spinner("Cargando datos..."):
-    df = cargar(lp_b, mp_b, cp_b, modo_fase, fase_sel, cutoff_fem, _cache_key=cache_key)
+    df_raw = cargar_raw(lp_b, mp_b, cp_b, modo_fase, fase_sel, _cache_key=cache_key)
 
-if df.empty: st.error("No se pudieron cargar los datos."); st.stop()
+if df_raw.empty: st.error("No se pudieron cargar los datos."); st.stop()
+
+# Clasificar ore en tiempo real — no afecta el cache de archivos
+df = clasificar(df_raw, criterios)
 
 mes_abr=MESES[mes]; mes_nombre=calendar.month_name[mes]
 fase_lbl=f" · Fase {fase_sel.upper()}" if modo_fase=="Por fase" and fase_sel else ""
@@ -398,6 +454,7 @@ with tab1:
                 <div class='metric-value'>{sv(mes_row,k_ton)}</div>
                 <div class='metric-sub'>Fe:{sv(mes_row,k_fe,"{:.2f}")}% | FeM:{sv(mes_row,k_fem,"{:.2f}")}% | DTT:{sv(mes_row,k_dtt,"{:.2f}")}%</div>
             </div>""",unsafe_allow_html=True)
+
     st.markdown("#### Acumulado anual")
     c4,c5,c6=st.columns(3)
     for w,mod,k_ton,k_fe,k_fem,k_dtt in [
@@ -411,6 +468,57 @@ with tab1:
                 <div class='metric-value'>{sv(total_row,k_ton)}</div>
                 <div class='metric-sub'>Fe:{sv(total_row,k_fe,"{:.2f}")}% | FeM:{sv(total_row,k_fem,"{:.2f}")}% | DTT:{sv(total_row,k_dtt,"{:.2f}")}%</div>
             </div>""",unsafe_allow_html=True)
+
+    # ── Desviaciones ──
+    st.markdown("---")
+    st.markdown("#### Desviaciones")
+    dev_modelo = st.radio("Comparar CP contra:", ["LP","MP"], horizontal=True, key="dev_mod")
+    k_ton_dev = "tonelaje"    if dev_modelo=="LP" else "tonelaje_mp"
+    k_fe_dev  = "fe"          if dev_modelo=="LP" else "fe_mp"
+    k_fem_dev = "fem"         if dev_modelo=="LP" else "fem_mp"
+    k_dtt_dev = "dtt"         if dev_modelo=="LP" else "dtt_mp"
+
+    def _dev(src, col_a, col_b, fmt_v="{:+,.1f}", fmt_p="{:+.1f}%"):
+        """Calcula desviación absoluta y porcentual entre col_a y col_b."""
+        try:
+            a = src[col_a].values[0]; b = src[col_b].values[0]
+            if pd.isna(a) or pd.isna(b): return "—","—","neu"
+            diff = float(b) - float(a)
+            pct  = diff / abs(float(a)) * 100 if float(a) != 0 else 0
+            cls  = "pos" if diff >= 0 else "neg"
+            return fmt_v.format(diff), fmt_p.format(pct), cls
+        except: return "—","—","neu"
+
+    st.markdown(f"**Mes — {mes_abr}**")
+    d1,d2,d3,d4 = st.columns(4)
+    for w, lbl, ka, kb in [
+        (d1, f"Ton. {dev_modelo} → CP (kt)", k_ton_dev, "tonelaje_cp"),
+        (d2, f"Fe {dev_modelo} → CP (%)",    k_fe_dev,  "fe_cp"),
+        (d3, f"FeM {dev_modelo} → CP (%)",   k_fem_dev, "fem_cp"),
+        (d4, f"DTT {dev_modelo} → CP (%)",   k_dtt_dev, "dtt_cp"),
+    ]:
+        dv, dp, cls = _dev(mes_row, ka, kb)
+        with w:
+            st.markdown(f"""<div class='metric-card'>
+                <div class='metric-label'>{lbl}</div>
+                <div class='metric-dev {cls}'>{dv} &nbsp;({dp})</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown(f"**Acumulado anual**")
+    d5,d6,d7,d8 = st.columns(4)
+    for w, lbl, ka, kb in [
+        (d5, f"Ton. {dev_modelo} → CP (kt)", k_ton_dev, "tonelaje_cp"),
+        (d6, f"Fe {dev_modelo} → CP (%)",    k_fe_dev,  "fe_cp"),
+        (d7, f"FeM {dev_modelo} → CP (%)",   k_fem_dev, "fem_cp"),
+        (d8, f"DTT {dev_modelo} → CP (%)",   k_dtt_dev, "dtt_cp"),
+    ]:
+        dv, dp, cls = _dev(total_row, ka, kb)
+        with w:
+            st.markdown(f"""<div class='metric-card'>
+                <div class='metric-label'>{lbl}</div>
+                <div class='metric-dev {cls}'>{dv} &nbsp;({dp})</div>
+            </div>""", unsafe_allow_html=True)
+
     st.markdown("---")
     cols_d=[c for c in ['mes','fe','fem','fedtt','dtt','p','s','tonelaje','fino',
                         'fe_mp','fem_mp','fedtt_mp','dtt_mp','p_mp','s_mp','tonelaje_mp','fino_mp',
