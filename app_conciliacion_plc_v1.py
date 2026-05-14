@@ -528,33 +528,7 @@ with tab1:
 
     st.markdown("---")
 
-    cols_d = [c for c in [
-        'mes', 'fe', 'fem', 'fedtt', 'p', 's', 'tonelaje', 'fino',
-        'fe_mp', 'fem_mp', 'fedtt_mp', 'p_mp', 's_mp', 'tonelaje_mp', 'fino_mp',
-        'fe_cp', 'fem_cp', 'fedtt_cp', 'p_cp', 's_cp', 'tonelaje_cp', 'fino_cp'
-    ] if c in tabla_mensual.columns]
-
-    def _highlight_rows(row):
-        if row['mes'] == 'Total':
-            return ['background-color:#1e2235;font-weight:bold'] * len(row)
-        elif row['mes'] == mes_abr:
-            return ['font-weight:700;border-left:3px solid #E8650A'] * len(row)
-        return [''] * len(row)
-
-    st.dataframe(
-        tabla_mensual[cols_d].style
-            .format({c: '{:.2f}' for c in cols_d if c != 'mes'})
-            .apply(_highlight_rows, axis=1),
-        use_container_width=True, hide_index=True
-    )
-
-    dl1, dl2, _ = st.columns([1, 1, 3])
-    with dl1:
-        st.download_button("⬇️ Tabla CSV", csv_bytes(tabla_mensual[cols_d]),
-                           "balance_mensual_plc.csv", "text/csv", key="dl_tabla")
-
     # ── Desviaciones — tarjetas estilo MLC ──
-    st.markdown("---")
     st.markdown("#### Desviaciones")
     dev_modelo = st.radio("Comparar CP contra:", ["LP", "MP"], horizontal=True, key="dev_mod")
     k_ton_dev = "tonelaje"    if dev_modelo == "LP" else "tonelaje_mp"
@@ -603,6 +577,30 @@ with tab1:
                 <div class='metric-dev {cls}'>{dv}</div>
                 <div class='metric-dev {cls}' style='font-size:11px;'>{dp}%</div>
             </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    cols_d = [c for c in [
+        'mes', 'fe', 'fem', 'fedtt', 'p', 's', 'tonelaje', 'fino',
+        'fe_mp', 'fem_mp', 'fedtt_mp', 'p_mp', 's_mp', 'tonelaje_mp', 'fino_mp',
+        'fe_cp', 'fem_cp', 'fedtt_cp', 'p_cp', 's_cp', 'tonelaje_cp', 'fino_cp'
+    ] if c in tabla_mensual.columns]
+
+    def _highlight_rows(row):
+        if row['mes'] == 'Total':
+            return ['background-color:#1e2235;font-weight:bold'] * len(row)
+        elif row['mes'] == mes_abr:
+            return ['font-weight:700;border-left:3px solid #E8650A'] * len(row)
+        return [''] * len(row)
+
+    st.dataframe(
+        tabla_mensual[cols_d].style
+            .format({c: '{:.2f}' for c in cols_d if c != 'mes'})
+            .apply(_highlight_rows, axis=1),
+        use_container_width=True, hide_index=True
+    )
+    st.download_button("⬇️ Tabla CSV", csv_bytes(tabla_mensual[cols_d]),
+                       "balance_mensual_plc.csv", "text/csv", key="dl_tabla")
 
 
 # ─────────────────────────────────────────────
@@ -1201,64 +1199,127 @@ with tab5:
     if df_mp.empty:
         st.info("Carga los archivos MP para el análisis de dispersión.")
     else:
-        ue_sel = st.selectbox("UE_FE", [1, 2, 3, 4, 5, 6], index=1)
+        _d1, _d2, _d3 = st.columns(3)
+        with _d1:
+            modelo_disp = st.radio("Modelo vs CP:", ["MP", "LP"],
+                                   horizontal=True, key="modelo_disp")
+        with _d2:
+            periodo_disp = st.radio("Período:", ["Mes", "Acumulado"],
+                                    horizontal=True, key="periodo_disp")
+        with _d3:
+            col_ue = 'ue_fe' if 'ue_fe' in df_mp.columns else None
+            if col_ue:
+                ue_vals = sorted([int(x) for x in df_mp[col_ue].dropna().unique()
+                                  if str(x).replace('.0','').lstrip('-').isdigit()
+                                  and 1 <= float(x) < 10])
+            else:
+                ue_vals = [1, 2, 3]
+            ue_vals = ue_vals or [1, 2]
+            ue_sel = st.multiselect("UE_FE:", ue_vals,
+                                    default=ue_vals[:2],
+                                    key="ue_fe_sel_plc")
 
-        arch    = f'output_mp_{mes}.csv'
-        df_mp_f = df_mp[df_mp['ARCHIVO'] == arch].drop_duplicates('block_id')
-        df_cp_f = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id')
-        merged  = pd.merge(df_cp_f, df_mp_f, on='block_id', suffixes=('_cp','_mp'))
-
-        if 'ue_fe_cp' in merged.columns and 'ue_fe_mp' in merged.columns:
-            df_filt = merged[(merged['ue_fe_cp'] == ue_sel) & (merged['ue_fe_mp'] == ue_sel)].copy()
-        else:
-            df_filt = merged.copy()
-
-        col_x = f'{var_disp_global}_cp'
-        col_y = f'{var_disp_global}_mp'
-
-        if df_filt.empty or col_x not in df_filt.columns or col_y not in df_filt.columns:
-            st.warning(f"Sin datos o columnas '{col_x}'/'{col_y}' no disponibles.")
+        if not ue_sel:
+            st.warning("Selecciona al menos una UE_FE.")
         else:
             try:
-                clean = df_filt[[col_x, col_y]].dropna()
-                xv, yv = clean[col_x], clean[col_y]
-                if len(xv) < 3:
-                    st.warning("Datos insuficientes para calcular regresión.")
-                else:
-                    pr, _       = pearsonr(xv, yv)
-                    sl, ic, *_ = linregress(xv, yv)
-                    max_val     = max(xv.max(), yv.max()) * 1.08
+                import seaborn as _sns
+                clr_p = _sns.color_palette()[0]
+                periodo_lbl = f"Ene–{mes_abr}" if periodo_disp == "Acumulado" else mes_abr
 
-                    fig, ax = make_fig((6, 6))
-                    ax.scatter(xv, yv, s=15, alpha=0.6, color='#4472C4', edgecolors='none')
-                    ax.plot([0, max_val], [0, max_val], color='#aaa', lw=1, linestyle=':')
-                    xf = np.linspace(0, max_val, 100)
-                    ax.plot(xf, sl*xf+ic, color='#cc4444', linestyle='--', lw=1.8)
+                arch = f'output_mp_{mes}.csv'
+                if periodo_disp == "Acumulado":
+                    df_mp_d = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                    df_cp_d = df_cp[df_cp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                else:
+                    df_mp_d = df_mp[df_mp['ARCHIVO'] == arch].drop_duplicates('block_id').copy()
+                    df_cp_d = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id').copy()
+
+                if modelo_disp == "MP":
+                    merged = pd.merge(
+                        df_cp_d[['block_id', 'extraccion', var_disp_global, 'ue_fe']],
+                        df_mp_d[['block_id', 'extraccion', var_disp_global, 'ue_fe']],
+                        on=['block_id', 'extraccion'], suffixes=('_cp', '_mp')
+                    )
+                    y_col   = f'{var_disp_global}_mp'
+                    y_label = f'{var_disp_global.upper()} MP (%)'
+                    ue_y    = 'ue_fe_mp'
+                    ue_x    = 'ue_fe_cp'
+                else:
+                    df_lp_d = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy() \
+                              if periodo_disp == "Acumulado" \
+                              else df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
+                    merged = df_lp_d[[var_disp_global, 'ue_fe',
+                                      f'{var_disp_global}_cp', 'ue_fe_cp']].copy()
+                    merged = merged.rename(columns={
+                        var_disp_global: f'{var_disp_global}_mp',
+                        'ue_fe':         'ue_fe_mp',
+                    })
+                    y_col   = f'{var_disp_global}_mp'
+                    y_label = f'{var_disp_global.upper()} LP (%)'
+                    ue_y    = 'ue_fe_mp'
+                    ue_x    = 'ue_fe_cp'
+
+                x_col = f'{var_disp_global}_cp'
+
+                n_ue = len(ue_sel)
+                fig, axes = plt.subplots(1, n_ue, figsize=(6*n_ue, 6),
+                                         facecolor='white', squeeze=False)
+                axes = axes[0]
+                for ax in axes: ax.set_facecolor('white')
+
+                for idx, ue in enumerate(sorted(ue_sel)):
+                    ax = axes[idx]
+                    if ue_x in merged.columns and ue_y in merged.columns:
+                        df_ue = merged[
+                            (merged[ue_x] == ue) & (merged[ue_y] == ue)
+                        ][[x_col, y_col]].dropna()
+                    else:
+                        df_ue = merged[[x_col, y_col]].dropna()
+
+                    if df_ue.empty:
+                        ax.text(0.5, 0.5, f'UE_FE={ue}\nSin datos',
+                                transform=ax.transAxes, ha='center', color='#888')
+                        ax.set_title(f'{var_disp_global.upper()} {modelo_disp} vs CP — UE_FE={ue}: {periodo_lbl}',
+                                     color='#222')
+                        continue
+
+                    _sns.scatterplot(x=x_col, y=y_col, data=df_ue,
+                                     alpha=1, edgecolors='none', s=20,
+                                     ax=ax, color=clr_p)
+
+                    max_val = max(df_ue[x_col].max(), df_ue[y_col].max()) * 1.05
+                    ax.plot([0, max_val], [0, max_val], color='gray', linestyle='-', lw=1)
+
                     ax.set_xlim(0, max_val); ax.set_ylim(0, max_val)
                     ax.set_xlabel(f'{var_disp_global.upper()} CP (%)', color='#444')
-                    ax.set_ylabel(f'{var_disp_global.upper()} MP (%)', color='#444')
+                    ax.set_ylabel(y_label, color='#444')
+                    ax.set_title(f'{var_disp_global.upper()} {modelo_disp} vs CP — UE_FE={ue}: {periodo_lbl}',
+                                 color='#222', fontsize=11)
                     style_ax(ax)
-                    ax.text(0.05, 0.93,
-                            f'UE_FE = {ue_sel} · {mes_abr}\n'
-                            f'Pearson r = {pr:.3f}\nn = {len(xv):,}',
-                            transform=ax.transAxes, fontsize=10, color='#333', va='top',
-                            bbox=dict(facecolor='#f5f5f5', edgecolor='#ddd', boxstyle='round,pad=0.4'))
-                    ax_t = ax.inset_axes([0, 1.02, 1, 0.18], sharex=ax)
-                    ax_r = ax.inset_axes([1.02, 0, 0.18, 1], sharey=ax)
-                    ax_t.hist(xv, bins=20, color='#4472C4', alpha=0.75, linewidth=0)
-                    ax_t.set_facecolor('white'); ax_t.axis('off')
-                    ax_r.hist(yv, bins=20, orientation='horizontal', color='#4472C4', alpha=0.75, linewidth=0)
-                    ax_r.set_facecolor('white'); ax_r.axis('off')
-                    ax.set_title(f'{var_disp_global.upper()} MP vs CP — {mes_abr}',
-                                 color='#222', pad=28, fontsize=11)
-                    plt.tight_layout()
-                    cd, _ = st.columns([1, 1])
-                    with cd:
-                        png_disp = save_png(fig)
-                        st.pyplot(fig); plt.close()
-                        st.download_button("⬇️ PNG Dispersión", png_disp,
-                                           f"dispersion_plc_{var_disp_global}_{mes_abr}.png",
-                                           "image/png", key="dl_png_disp")
+
+                    pr, _ = pearsonr(df_ue[x_col], df_ue[y_col])
+                    ax.text(0.05, 0.95, f'Coeficiente de Pearson: {pr:.2f}',
+                            transform=ax.transAxes, fontsize=11,
+                            verticalalignment='top', color='green')
+
+                    ax_top = ax.inset_axes([0, 1.02, 1, 0.2], sharex=ax)
+                    ax_top.hist(df_ue[x_col], bins=20, color=clr_p, alpha=0.9, linewidth=0)
+                    ax_top.axis('off')
+                    ax_right = ax.inset_axes([1.02, 0, 0.2, 1], sharey=ax)
+                    ax_right.hist(df_ue[y_col], bins=20, orientation='horizontal',
+                                  color=clr_p, alpha=0.9, linewidth=0)
+                    ax_right.axis('off')
+
+                plt.suptitle(f'Pleito Central — {modelo_disp} vs CP',
+                             color='#222', fontsize=11, y=1.04)
+                plt.tight_layout()
+                png_disp = save_png(fig, dpi=150)
+                st.pyplot(fig); plt.close()
+                st.download_button("⬇️ PNG Dispersión", png_disp,
+                                   f"dispersion_plc_{var_disp_global}_{modelo_disp}_{mes_abr}.png",
+                                   "image/png", key="dl_png_disp")
+
             except Exception as e:
                 st.error(f"Error en dispersión: {e}")
 
