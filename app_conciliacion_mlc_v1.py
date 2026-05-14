@@ -492,13 +492,15 @@ with tab2:
 
     # Acumulado
     st.markdown("### Extracción Acumulada")
+    show_ann_acum=st.checkbox("Mostrar etiquetas en acumulado",value=True,key="sann_acum")
     fig3,ax3=make_fig((14,5))
     for col,lbl,clr,off in [('tonelaje','LP',col_lp,-18),('tonelaje_mp','MP',col_mp,-10),('tonelaje_cp','CP',col_cp,8)]:
         if col in tabla_plot.columns:
             cum=tabla_plot[col].cumsum()
             ax3.plot(tabla_plot['mes'],cum,marker='o',label=lbl,color=clr,lw=1.8)
-            for i,(m,v) in enumerate(zip(tabla_plot['mes'],cum)):
-                if not pd.isna(v): ax3.annotate(f'{v:,.1f}',xy=(i,v),xytext=(0,off),textcoords='offset points',ha='center',fontsize=7,color=clr)
+            if show_ann_acum:
+                for i,(m,v) in enumerate(zip(tabla_plot['mes'],cum)):
+                    if not pd.isna(v): ax3.annotate(f'{v:,.1f}',xy=(i,v),xytext=(0,off),textcoords='offset points',ha='center',fontsize=7,color=clr)
     if target_ton>0:
         ax3.plot(tabla_plot['mes'],np.cumsum([target_ton/12]*12),'--',color='#cc4444',lw=1.5,label=f'Obj({target_ton:,.0f}kt)')
     ax3.set_ylabel('Tonelaje acumulado (kt)',color='#444'); ax3.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
@@ -516,8 +518,8 @@ with tab3:
     with cv1: panel_m=st.radio("Paneles:",["MP y CP","Solo MP","Solo CP"],horizontal=True,key="pm")
     with cv2: grilla=st.checkbox("Mostrar grilla",value=True)
     cg1,cg2=st.columns(2)
-    with cg1: grid_x=st.number_input("Espaciado grilla X (m)",value=50,step=25,min_value=10,key="gx")
-    with cg2: grid_y=st.number_input("Espaciado grilla Y (m)",value=50,step=25,min_value=10,key="gy")
+    with cg1: grid_x=st.number_input("Espaciado grilla X (m)",value=100,step=25,min_value=10,key="gx")
+    with cg2: grid_y=st.number_input("Espaciado grilla Y (m)",value=100,step=25,min_value=10,key="gy")
     TAM=12.5
     # Cota (Cell 27): cota = df.loc[periodo==mes, centroid_z].min()
     try:
@@ -603,16 +605,24 @@ with tab4:
             orientation="v",
             measure=["absolute","relative","relative","total","relative","relative","relative","total"],
             x=x, text=[f"{v:,.1f}" for v in y], textposition="outside", y=y,
+            textfont=dict(color='black', size=13),
             increasing={"marker":{"color":"#43A047"}},
             decreasing={"marker":{"color":"#EF5350"}},
             totals={"marker":{"color":"#42A5F5"}},
             connector={"line":{"color":"#999","width":1}},
         ))
-        fw.update_layout(title=dict(text=f"<b>{titulo}</b>",font=dict(size=22,color='#000'),x=0,xanchor='left'),
-                         paper_bgcolor='white',plot_bgcolor='white',
-                         font=dict(color='#000',size=13),height=420,margin=dict(t=80,b=60,l=60,r=30))
-        fw.update_yaxes(title_text="Tonelaje (kt)",range=yrange,tickformat=",d",showgrid=False,zerolinecolor='#ccc')
-        fw.update_xaxes(showgrid=False)
+        fw.update_layout(
+            title=dict(text=f"<b>{titulo}</b>",
+                       font=dict(size=20,color='black'),x=0,xanchor='left'),
+            paper_bgcolor='white', plot_bgcolor='white',
+            font=dict(color='black', size=13),
+            height=420, margin=dict(t=80,b=60,l=60,r=30)
+        )
+        fw.update_yaxes(title_text="Tonelaje (kt)", range=yrange, tickformat=",d",
+                        showgrid=False, zerolinecolor='#ccc',
+                        tickfont=dict(color='black',size=12),
+                        title_font=dict(color='black',size=12))
+        fw.update_xaxes(tickfont=dict(color='black',size=12), showgrid=False)
         return fw
 
     X_CASC=["Proyectado","Mineral Marginal","Mineral Esteril","Mineral Mineral",
