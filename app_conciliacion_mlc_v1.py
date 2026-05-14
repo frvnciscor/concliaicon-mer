@@ -478,8 +478,7 @@ with tab1:
     k_fem_dev = "fem"         if dev_modelo=="LP" else "fem_mp"
     k_dtt_dev = "dtt"         if dev_modelo=="LP" else "dtt_mp"
 
-    def _dev(src, col_a, col_b, fmt_v="{:+,.1f}", fmt_p="{:+.1f}%"):
-        """Calcula desviación absoluta y porcentual entre col_a y col_b."""
+    def _dev(src, col_a, col_b, fmt_v="{:+,.1f}", fmt_p="{:+.1f}"):
         try:
             a = src[col_a].values[0]; b = src[col_b].values[0]
             if pd.isna(a) or pd.isna(b): return "—","—","neu"
@@ -501,7 +500,8 @@ with tab1:
         with w:
             st.markdown(f"""<div class='metric-card'>
                 <div class='metric-label'>{lbl}</div>
-                <div class='metric-dev {cls}'>{dv} &nbsp;({dp})</div>
+                <div class='metric-dev {cls}'>{dv}</div>
+                <div class='metric-dev {cls}' style='font-size:11px;'>{dp}%</div>
             </div>""", unsafe_allow_html=True)
 
     st.markdown(f"**Acumulado anual**")
@@ -516,7 +516,8 @@ with tab1:
         with w:
             st.markdown(f"""<div class='metric-card'>
                 <div class='metric-label'>{lbl}</div>
-                <div class='metric-dev {cls}'>{dv} &nbsp;({dp})</div>
+                <div class='metric-dev {cls}'>{dv}</div>
+                <div class='metric-dev {cls}' style='font-size:11px;'>{dp}%</div>
             </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
