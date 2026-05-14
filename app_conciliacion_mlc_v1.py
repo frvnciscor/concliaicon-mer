@@ -847,63 +847,100 @@ with tab4:
 # ── TAB 5: DISPERSIÓN (Cell 35) ──
 with tab5:
     st.markdown("### Análisis de Dispersión — Fe")
-    st.markdown("*Cell 35 del notebook: ue_fe_mp == ue_fe_cp == i, x=fe_cp, y=fe (LP)*")
-    _d1,_d2=st.columns(2)
-    with _d1: periodo_disp=st.radio("Período:",["Mes","Acumulado"],horizontal=True,key="pdisp")
+
+    _d1, _d2, _d3 = st.columns(3)
+    with _d1:
+        modelo_disp = st.radio("Comparar CP contra:", ["MP","LP"],
+                               horizontal=True, key="modelo_disp")
     with _d2:
-        col_ue='ue_fe_mp' if 'ue_fe_mp' in df.columns else 'ue_fe'
-        ue_vals=sorted([int(x) for x in df[col_ue].dropna().unique()
-                        if str(x).replace('.0','').lstrip('-').isdigit() and 1<=float(x)<10])
-        ue_vals=ue_vals or [4,5]
-        ue_sel=st.multiselect("UE_FE:",ue_vals,
-                              default=[u for u in [4,5] if u in ue_vals] or ue_vals[:2],key="uesel")
+        periodo_disp = st.radio("Período:", ["Mes","Acumulado"],
+                                horizontal=True, key="pdisp")
+    with _d3:
+        col_ue = 'ue_fe_mp' if 'ue_fe_mp' in df.columns else 'ue_fe'
+        ue_vals = sorted([int(x) for x in df[col_ue].dropna().unique()
+                          if str(x).replace('.0','').lstrip('-').isdigit()
+                          and 1 <= float(x) < 10])
+        ue_vals = ue_vals or [4, 5]
+        ue_sel = st.multiselect("UE_FE:", ue_vals,
+                                default=[u for u in [4,5] if u in ue_vals] or ue_vals[:2],
+                                key="uesel")
 
     if not ue_sel:
         st.warning("Selecciona al menos una UE_FE.")
     else:
         try:
             import seaborn as _sns
-            clr_p=_sns.color_palette()[0]
-            df_d=df[df['periodo']<=mes].copy() if periodo_disp=="Acumulado" else df[df['periodo']==mes].copy()
-            periodo_lbl=f"Ene–{mes_abr}" if periodo_disp=="Acumulado" else mes_abr
+            clr_p = _sns.color_palette()[0]
 
-            fig,axes=plt.subplots(1,len(ue_sel),figsize=(6*len(ue_sel),6),facecolor='white',squeeze=False)
-            axes=axes[0]
+            df_d = (df[df['periodo'] <= mes].copy() if periodo_disp == "Acumulado"
+                    else df[df['periodo'] == mes].copy())
+            periodo_lbl = f"Ene–{mes_abr}" if periodo_disp == "Acumulado" else mes_abr
+
+            # Columna Y según selector LP o MP
+            if modelo_disp == "MP":
+                y_col    = 'fe_mp'
+                ue_y_col = 'ue_fe_mp'
+                y_label  = 'Fe_mp (%)'
+            else:
+                y_col    = 'fe'
+                ue_y_col = 'ue_fe'
+                y_label  = 'Fe_lp (%)'
+
+            fig, axes = plt.subplots(1, len(ue_sel),
+                                     figsize=(6*len(ue_sel), 6),
+                                     facecolor='white', squeeze=False)
+            axes = axes[0]
             for ax in axes: ax.set_facecolor('white')
 
-            for idx,ue in enumerate(sorted(ue_sel)):
-                ax=axes[idx]
-                # Cell 35: ue_filtered_df = df[(df['ue_fe_mp']==i)&(df['ue_fe_cp']==i)]
-                # x='fe_cp', y='fe' (LP — sin sufijo)
-                df_ue=df_d[(df_d.get('ue_fe_mp',df_d.get('ue_fe',''))==ue)&
-                           (df_d.get('ue_fe_cp',df_d.get('ue_fe',''))==ue)][['fe','fe_cp']].dropna()
+            for idx, ue in enumerate(sorted(ue_sel)):
+                ax = axes[idx]
+
+                # Filtro: ue_fe del modelo Y == ue AND ue_fe_cp == ue
+                mask = ((df_d[ue_y_col] == ue) &
+                        (df_d['ue_fe_cp'] == ue)) if ue_y_col in df_d.columns else pd.Series(False, index=df_d.index)
+                df_ue = df_d[mask][[y_col, 'fe_cp']].dropna()
 
                 if df_ue.empty:
-                    ax.text(0.5,0.5,f'UE_FE={ue}\nSin datos',transform=ax.transAxes,ha='center',color='#888')
-                    ax.set_title(f'Gráfico de dispersión de UE_FE = {ue}: {periodo_lbl}',color='#222'); continue
+                    ax.text(0.5, 0.5, f'UE_FE={ue}\nSin datos',
+                            transform=ax.transAxes, ha='center', color='#888')
+                    ax.set_title(f'Fe {modelo_disp} vs CP — UE_FE={ue}: {periodo_lbl}',
+                                 color='#222')
+                    continue
 
-                _sns.scatterplot(x='fe_cp',y='fe',data=df_ue,alpha=1,edgecolors='none',s=20,ax=ax,color=clr_p)
-                ax.plot([0,70],[0,70],color='gray',linestyle='-',lw=1)
-
-                ax.set_xlim(0,70); ax.set_ylim(0,70)
-                ax.set_xlabel('Fe_cp (%)',color='#444'); ax.set_ylabel('Fe_mp (%)',color='#444')
-                ax.set_title(f'Gráfico de dispersión de UE_FE = {ue}: {periodo_lbl}',color='#222',fontsize=11)
+                _sns.scatterplot(x='fe_cp', y=y_col, data=df_ue,
+                                 alpha=1, edgecolors='none', s=20,
+                                 ax=ax, color=clr_p)
+                ax.plot([0, 70], [0, 70], color='gray', linestyle='-', lw=1)
+                ax.set_xlim(0, 70); ax.set_ylim(0, 70)
+                ax.set_xlabel('Fe_cp (%)', color='#444')
+                ax.set_ylabel(y_label, color='#444')
+                ax.set_title(f'Fe {modelo_disp} vs CP — UE_FE={ue}: {periodo_lbl}',
+                             color='#222', fontsize=11)
                 style_ax(ax)
 
-                pr,_=pearsonr(df_ue['fe_cp'],df_ue['fe'])
-                ax.text(0.05,0.95,f'Coeficiente de Pearson: {pr:.2f}',
-                        transform=ax.transAxes,fontsize=11,va='top',color='green')
+                pr, _ = pearsonr(df_ue['fe_cp'], df_ue[y_col])
+                ax.text(0.05, 0.95, f'Coeficiente de Pearson: {pr:.2f}',
+                        transform=ax.transAxes, fontsize=11, va='top', color='green')
 
-                ax_t=ax.inset_axes([0,1.02,1,0.2],sharex=ax)
-                ax_t.hist(df_ue['fe_cp'],bins=20,color=clr_p,alpha=0.9,linewidth=0); ax_t.axis('off')
-                ax_r=ax.inset_axes([1.02,0,0.2,1],sharey=ax)
-                ax_r.hist(df_ue['fe'],bins=20,orientation='horizontal',color=clr_p,alpha=0.9,linewidth=0); ax_r.axis('off')
+                ax_t = ax.inset_axes([0, 1.02, 1, 0.2], sharex=ax)
+                ax_t.hist(df_ue['fe_cp'], bins=20, color=clr_p, alpha=0.9, linewidth=0)
+                ax_t.axis('off')
+                ax_r = ax.inset_axes([1.02, 0, 0.2, 1], sharey=ax)
+                ax_r.hist(df_ue[y_col], bins=20, orientation='horizontal',
+                          color=clr_p, alpha=0.9, linewidth=0)
+                ax_r.axis('off')
 
-            plt.suptitle(f'Mina Los Colorados{fase_lbl}',color='#222',fontsize=11,y=1.04)
-            plt.tight_layout(); png_d=save_png(fig,dpi=150)
+            plt.suptitle(f'Mina Los Colorados{fase_lbl} — {modelo_disp} vs CP',
+                         color='#222', fontsize=11, y=1.04)
+            plt.tight_layout()
+            png_d = save_png(fig, dpi=150)
             st.pyplot(fig); plt.close()
-            st.download_button("⬇️ PNG Dispersión",png_d,f"disp_mlc_{mes_abr}.png","image/png",key="dldisp")
-        except Exception as e: st.error(f"Error dispersión: {e}")
+            st.download_button("⬇️ PNG Dispersión", png_d,
+                               f"disp_mlc_{modelo_disp}_{mes_abr}.png",
+                               "image/png", key="dldisp")
+
+        except Exception as e:
+            st.error(f"Error dispersión: {e}")
 
 # ── TAB 6: CUADRANTES FeM (Cell 41) ──
 with tab6:
@@ -924,84 +961,88 @@ with tab6:
         if 'proportional_volume' in df_q.columns and 'dim_x' in df_q.columns:
             df_q=df_q[df_q['proportional_volume']>=0.75*df_q['dim_x']*df_q['dim_y']*df_q['dim_z']].copy()
 
-        df_fem=df_q[['fem','fem_cp']].dropna().copy()
-        df_fem=df_fem.rename(columns={'fem':'fem_mp'})
-
-        if df_fem.empty: st.warning("Sin datos.")
+        # Cell 41: df_base usa fem_mp (MP) vs fem_cp (CP)
+        if 'fem_mp' not in df_q.columns or 'fem_cp' not in df_q.columns:
+            st.warning("Columnas fem_mp o fem_cp no disponibles.")
         else:
-            pr_q,_=pearsonr(df_fem['fem_cp'],df_fem['fem_mp'])
-            coin=(df_fem['fem_cp']>=cutoff_q)&(df_fem['fem_mp']>=cutoff_q)
-            perd=(df_fem['fem_cp']< cutoff_q)&(df_fem['fem_mp']>=cutoff_q)
-            ster=(df_fem['fem_cp']< cutoff_q)&(df_fem['fem_mp']< cutoff_q)
-            gain=(df_fem['fem_cp']>=cutoff_q)&(df_fem['fem_mp']< cutoff_q)
-            cnt={"I":int(coin.sum()),"II":int(perd.sum()),"III":int(ster.sum()),"IV":int(gain.sum())}
+            df_fem = df_q[['fem_mp', 'fem_cp']].dropna().copy()
 
-            r1=st.columns(4)
-            for cw,(lbl,val),cls in zip(r1,[("Coincidencia Mineral (I)",cnt["I"]),("Pérdida Mineral (II)",cnt["II"]),
-                                             ("Coincidencia Estéril (III)",cnt["III"]),("Ganancia Mineral (IV)",cnt["IV"])],
-                                        ['green','red','','blue']):
-                with cw: st.markdown(_metric_html(lbl,f'{val:,}',cls),unsafe_allow_html=True)
+            if df_fem.empty:
+                st.warning("Sin datos.")
+            else:
+                pr_q,_=pearsonr(df_fem['fem_cp'],df_fem['fem_mp'])
+                coin=(df_fem['fem_cp']>=cutoff_q)&(df_fem['fem_mp']>=cutoff_q)
+                perd=(df_fem['fem_cp']< cutoff_q)&(df_fem['fem_mp']>=cutoff_q)
+                ster=(df_fem['fem_cp']< cutoff_q)&(df_fem['fem_mp']< cutoff_q)
+                gain=(df_fem['fem_cp']>=cutoff_q)&(df_fem['fem_mp']< cutoff_q)
+                cnt={"I":int(coin.sum()),"II":int(perd.sum()),"III":int(ster.sum()),"IV":int(gain.sum())}
 
-            df_fem['ore_mp_fem']=np.where(df_fem['fem_mp']>=cutoff_q,'mineral','esteril')
-            df_fem['ore_cp_fem']=np.where(df_fem['fem_cp']>=cutoff_q,'mineral','esteril')
+                r1=st.columns(4)
+                for cw,(lbl,val),cls in zip(r1,[("Coincidencia Mineral (I)",cnt["I"]),("Pérdida Mineral (II)",cnt["II"]),
+                                                 ("Coincidencia Estéril (III)",cnt["III"]),("Ganancia Mineral (IV)",cnt["IV"])],
+                                            ['green','red','','blue']):
+                    with cw: st.markdown(_metric_html(lbl,f'{val:,}',cls),unsafe_allow_html=True)
 
-            sc_col,_=st.columns([1,1])
-            with sc_col:
-                fig,ax=make_fig((7,6))
-                ax.plot([0,70],[0,70],color='black',lw=1)
-                ax.axvline(cutoff_q,ls='--',color='black',lw=1)
-                ax.axhline(cutoff_q,ls='--',color='black',lw=1)
-                ax.scatter(df_fem.loc[ster,'fem_cp'],df_fem.loc[ster,'fem_mp'],s=18,color='#d9d9d9',label='Estéril',alpha=0.8)
-                ax.scatter(df_fem.loc[coin,'fem_cp'],df_fem.loc[coin,'fem_mp'],s=18,color='#2ca02c',label='Coincidencia',alpha=0.8)
-                ax.scatter(df_fem.loc[perd,'fem_cp'],df_fem.loc[perd,'fem_mp'],s=18,color='#ff7f0e',label='Pérdida',alpha=0.8)
-                ax.scatter(df_fem.loc[gain,'fem_cp'],df_fem.loc[gain,'fem_mp'],s=18,color='#1f77b4',label='Ganancia',alpha=0.8)
-                ax.set_xlim(0,70); ax.set_ylim(0,70)
-                ax.set_xlabel('FeM CP (%)',color='#444'); ax.set_ylabel('FeM MP (%)',color='#444')
-                style_ax(ax)
-                hi=(cutoff_q+70)/2; lo=cutoff_q/2
-                # Cell 41 posición etiquetas: fija en texto (52,30),(10,30),(10,10),(52,10)
-                for txt,xp,yp in [('I',52,30),('II',10,30),('III',10,10),('IV',52,10)]:
-                    ax.text(xp,yp,txt,fontsize=12,weight='bold',color='#444')
-                ax.text(0.02,0.98,
-                        f'Coef. Pearson: {pr_q:.2f}\n'
-                        f'Coincidencia Mineral (I): {cnt["I"]}\n'
-                        f'Pérdida Mineral (II): {cnt["II"]}\n'
-                        f'Coincidencia Estéril (III): {cnt["III"]}\n'
-                        f'Ganancia Mineral (IV): {cnt["IV"]}',
-                        transform=ax.transAxes,fontsize=9,color='#333',va='top',
-                        bbox=dict(facecolor='white',alpha=1,edgecolor='none',boxstyle='round,pad=0.3'))
-                ax.legend(loc='upper center',bbox_to_anchor=(0.5,-0.08),ncol=4,frameon=False,fontsize=9,labelcolor='#333')
-                ax.set_title(f'Dispersión (MP vs CP) - MLC – {mes_abr}',color='#222',fontsize=11)
-                plt.tight_layout(); png_cuad=save_png(fig)
-                st.pyplot(fig); plt.close()
-                st.download_button("⬇️ PNG Cuadrantes",png_cuad,f"cuad_mlc_{mes_abr}.png","image/png",key="dlcuad")
+                df_fem['ore_mp_fem']=np.where(df_fem['fem_mp']>=cutoff_q,'mineral','esteril')
+                df_fem['ore_cp_fem']=np.where(df_fem['fem_cp']>=cutoff_q,'mineral','esteril')
 
-            mx_col,_=st.columns([1,1])
-            with mx_col:
-                ow=['mineral','esteril']
-                df_fem['ore_mp_fem']=pd.Categorical(df_fem['ore_mp_fem'],categories=ow,ordered=True)
-                df_fem['ore_cp_fem']=pd.Categorical(df_fem['ore_cp_fem'],categories=ow,ordered=True)
-                ct_ow=(pd.crosstab(df_fem['ore_mp_fem'],df_fem['ore_cp_fem']).reindex(index=ow[::-1],columns=ow).fillna(0))
-                ct_pct=ct_ow.div(ct_ow.sum(axis=1),axis=0).mul(100).round(1).fillna(0)
-                ann=(ct_ow.astype(int).apply(lambda c:c.map('{:,}'.format)).astype(str)+'\n('+ct_pct.astype(str)+'%)')
-                fig2,ax2=plt.subplots(figsize=(6,5),facecolor='white'); ax2.set_facecolor('white')
-                sns.heatmap(ct_pct,cmap=hq_cmap,annot=ann,fmt='',square=True,linewidths=0.5,cbar=True,annot_kws={'size':10},ax=ax2)
-                prd_lbl=f"Ene–{mes_abr}" if periodo_q=="Acumulado" else mes_nombre
-                ax2.set_title(f'Cumplimiento Ore/Waste (%) - MLC: {prd_lbl}',color='#222',pad=10)
-                ax2.tick_params(colors='#333'); ax2.set_xlabel('Ore CP',color='#444'); ax2.set_ylabel('Ore MP',color='#444')
-                plt.tight_layout(); png_ow=save_png(fig2)
-                st.pyplot(fig2); plt.close()
-                st.download_button("⬇️ PNG Ore/Waste",png_ow,f"ow_mlc_{mes_abr}.png","image/png",key="dlow")
+                sc_col,_=st.columns([1,1])
+                with sc_col:
+                    fig,ax=make_fig((7,6))
+                    ax.plot([0,70],[0,70],color='black',lw=1)
+                    ax.axvline(cutoff_q,ls='--',color='black',lw=1)
+                    ax.axhline(cutoff_q,ls='--',color='black',lw=1)
+                    ax.scatter(df_fem.loc[ster,'fem_cp'],df_fem.loc[ster,'fem_mp'],s=18,color='#d9d9d9',label='Estéril',alpha=0.8)
+                    ax.scatter(df_fem.loc[coin,'fem_cp'],df_fem.loc[coin,'fem_mp'],s=18,color='#2ca02c',label='Coincidencia',alpha=0.8)
+                    ax.scatter(df_fem.loc[perd,'fem_cp'],df_fem.loc[perd,'fem_mp'],s=18,color='#ff7f0e',label='Pérdida',alpha=0.8)
+                    ax.scatter(df_fem.loc[gain,'fem_cp'],df_fem.loc[gain,'fem_mp'],s=18,color='#1f77b4',label='Ganancia',alpha=0.8)
+                    ax.set_xlim(0,70); ax.set_ylim(0,70)
+                    ax.set_xlabel('FeM CP (%)',color='#444'); ax.set_ylabel('FeM MP (%)',color='#444')
+                    style_ax(ax)
+                    hi=(cutoff_q+70)/2; lo=cutoff_q/2
+                    # Cell 41 posición etiquetas: fija en texto (52,30),(10,30),(10,10),(52,10)
+                    for txt,xp,yp in [('I',52,30),('II',10,30),('III',10,10),('IV',52,10)]:
+                        ax.text(xp,yp,txt,fontsize=12,weight='bold',color='#444')
+                    ax.text(0.02,0.98,
+                            f'Coef. Pearson: {pr_q:.2f}\n'
+                            f'Coincidencia Mineral (I): {cnt["I"]}\n'
+                            f'Pérdida Mineral (II): {cnt["II"]}\n'
+                            f'Coincidencia Estéril (III): {cnt["III"]}\n'
+                            f'Ganancia Mineral (IV): {cnt["IV"]}',
+                            transform=ax.transAxes,fontsize=9,color='#333',va='top',
+                            bbox=dict(facecolor='white',alpha=1,edgecolor='none',boxstyle='round,pad=0.3'))
+                    ax.legend(loc='upper center',bbox_to_anchor=(0.5,-0.08),ncol=4,frameon=False,fontsize=9,labelcolor='#333')
+                    ax.set_title(f'Dispersión (MP vs CP) - MLC – {mes_abr}',color='#222',fontsize=11)
+                    plt.tight_layout(); png_cuad=save_png(fig)
+                    st.pyplot(fig); plt.close()
+                    st.download_button("⬇️ PNG Cuadrantes",png_cuad,f"cuad_mlc_{mes_abr}.png","image/png",key="dlcuad")
 
-            if 'mineral' in ct_ow.index and 'mineral' in ct_ow.columns:
-                TP=int(ct_ow.loc['mineral','mineral']); TN=int(ct_ow.loc['esteril','esteril']) if 'esteril' in ct_ow.index else 0
-                FP=int(ct_ow.loc['esteril','mineral']) if 'esteril' in ct_ow.index else 0
-                FN=int(ct_ow.loc['mineral','esteril']) if 'esteril' in ct_ow.columns else 0
-                pv=FN/(TP+FN)*100 if (TP+FN)>0 else 0
-                r2=st.columns(3)
-                with r2[0]: st.markdown(_metric_html('Mineral MP',f'{TP+FN:,}'),unsafe_allow_html=True)
-                with r2[1]: st.markdown(_metric_html('Mineral CP',f'{TP+FP:,}'),unsafe_allow_html=True)
-                with r2[2]: st.markdown(_metric_html('Pérdida Min→Est',f'{FN:,} ({pv:.1f}%)','red'),unsafe_allow_html=True)
+                mx_col,_=st.columns([1,1])
+                with mx_col:
+                    ow=['mineral','esteril']
+                    df_fem['ore_mp_fem']=pd.Categorical(df_fem['ore_mp_fem'],categories=ow,ordered=True)
+                    df_fem['ore_cp_fem']=pd.Categorical(df_fem['ore_cp_fem'],categories=ow,ordered=True)
+                    ct_ow=(pd.crosstab(df_fem['ore_mp_fem'],df_fem['ore_cp_fem']).reindex(index=ow[::-1],columns=ow).fillna(0))
+                    ct_pct=ct_ow.div(ct_ow.sum(axis=1),axis=0).mul(100).round(1).fillna(0)
+                    ann=(ct_ow.astype(int).apply(lambda c:c.map('{:,}'.format)).astype(str)+'\n('+ct_pct.astype(str)+'%)')
+                    fig2,ax2=plt.subplots(figsize=(6,5),facecolor='white'); ax2.set_facecolor('white')
+                    sns.heatmap(ct_pct,cmap=hq_cmap,annot=ann,fmt='',square=True,linewidths=0.5,cbar=True,annot_kws={'size':10},ax=ax2)
+                    prd_lbl=f"Ene–{mes_abr}" if periodo_q=="Acumulado" else mes_nombre
+                    ax2.set_title(f'Cumplimiento Ore/Waste (%) - MLC: {prd_lbl}',color='#222',pad=10)
+                    ax2.tick_params(colors='#333'); ax2.set_xlabel('Ore CP',color='#444'); ax2.set_ylabel('Ore MP',color='#444')
+                    plt.tight_layout(); png_ow=save_png(fig2)
+                    st.pyplot(fig2); plt.close()
+                    st.download_button("⬇️ PNG Ore/Waste",png_ow,f"ow_mlc_{mes_abr}.png","image/png",key="dlow")
+
+                if 'mineral' in ct_ow.index and 'mineral' in ct_ow.columns:
+                    TP=int(ct_ow.loc['mineral','mineral']); TN=int(ct_ow.loc['esteril','esteril']) if 'esteril' in ct_ow.index else 0
+                    FP=int(ct_ow.loc['esteril','mineral']) if 'esteril' in ct_ow.index else 0
+                    FN=int(ct_ow.loc['mineral','esteril']) if 'esteril' in ct_ow.columns else 0
+                    pv=FN/(TP+FN)*100 if (TP+FN)>0 else 0
+                    r2=st.columns(3)
+                    with r2[0]: st.markdown(_metric_html('Mineral MP',f'{TP+FN:,}'),unsafe_allow_html=True)
+                    with r2[1]: st.markdown(_metric_html('Mineral CP',f'{TP+FP:,}'),unsafe_allow_html=True)
+                    with r2[2]: st.markdown(_metric_html('Pérdida Min→Est',f'{FN:,} ({pv:.1f}%)','red'),unsafe_allow_html=True)
     except Exception as e: st.error(f"Error cuadrantes: {e}")
 
 # ── TAB 7: MATRICES (Cell 38) ──
