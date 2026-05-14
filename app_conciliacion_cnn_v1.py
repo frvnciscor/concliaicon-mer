@@ -36,14 +36,24 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-COLUMNAS_REQUERIDAS = [
-    "block_id", "centroid_x", "centroid_y", "centroid_z",
-    "dim_x", "dim_y", "dim_z", "volume", "proportional_volume",
-    "fe", "fem", "fe_dtt", "fedtt", "al2o3", "p", "s", "sio2",
-    "densidad", "mag", "ocurrencia", "litologia", "alteracion",
-    "intensidad", "bound", "dominio", "ue_fe", "mine",
-    "categoria", "extraccion", "fase"
+SCHEMA_CNN = [
+    "block_id",
+    "centroid_x", "centroid_y", "centroid_z",
+    "dim_x", "dim_y", "dim_z",
+    "proportional_volume", "densidad",
+    "fe", "fem", "fe_dtt", "dtt", "p", "s",
+    "sio2", "al2o3", "v", "mag",
+    "ocurrencia", "ue_fe", "categoria",
+    "axb", "bwi_cab", "bwi_conc",
+    "extraccion", "fase",
 ]
+
+COLS_DROP_CNN = [
+    'volume', 'litologia', 'alteracion', 'intensidad',
+    'bound', 'dominio', 'mine', 'fedtt',  # fedtt = alias, usamos fe_dtt
+]
+
+COLUMNAS_REQUERIDAS = SCHEMA_CNN
 
 VARS_CALIDAD    = ['fe', 'fem', 'fe_dtt', 'p', 's']
 VARS_DISPERSION = ['fe', 'fem', 'fe_dtt', 'p', 's', 'mag']
@@ -97,31 +107,42 @@ st.markdown("""
 # ─────────────────────────────────────────────
 
 def leer_csv_cnn(uploaded_file, columnas_extra=None):
-    """Lectura CSV con formato Vulcan (4 líneas de cabecera)."""
+    """Lee CSV formato Vulcan. Aplica schema maestro + elimina BOM."""
     try:
-        try:
-            header_df = pd.read_csv(uploaded_file, nrows=1, header=None)
-            uploaded_file.seek(0)
-            col_names = header_df.iloc[0].tolist()
-            df = pd.read_csv(uploaded_file, skiprows=4, header=None,
-                             names=col_names, low_memory=False, encoding='latin1')
-        except Exception:
-            uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, low_memory=False, encoding='latin1')
-        df.columns = [str(c).strip().lower() for c in df.columns]
-        # fe_dtt puede estar como fedtt — normalizar
+        # Leer bytes y eliminar BOM
+        if hasattr(uploaded_file, 'read'):
+            raw = uploaded_file.read()
+        else:
+            raw = uploaded_file
+        if raw[:3] == b'\xef\xbb\xbf':
+            raw = raw[3:]
+        buf = io.BytesIO(raw)
+
+        header_df = pd.read_csv(buf, nrows=1, header=None, encoding='utf-8')
+        buf.seek(0)
+        col_names = [str(c).strip().lower() for c in header_df.iloc[0].tolist()]
+
+        df = pd.read_csv(buf, skiprows=4, header=None,
+                         names=col_names, low_memory=False, encoding='utf-8')
+
+        # Normalizar fe_dtt
         if 'fedtt' in df.columns and 'fe_dtt' not in df.columns:
             df = df.rename(columns={'fedtt': 'fe_dtt'})
+
+        # Aplicar schema: solo columnas necesarias, mismo orden
+        cols_schema = SCHEMA_CNN + (columnas_extra or [])
+        df = df.reindex(columns=[c for c in cols_schema if c in df.columns or c in SCHEMA_CNN])
+
         # Densidad -99 → 2.7
         if 'densidad' in df.columns:
             df.loc[df['densidad'] == -99, 'densidad'] = 2.7
-        # Normalizar ocurrencias CNN: gui/dis → gyd
+
+        # Ocurrencia: gui/dis → gyd
         if 'ocurrencia' in df.columns:
             df['ocurrencia'] = df['ocurrencia'].replace({'gui': 'gyd', 'dis': 'gyd'})
-        cols_a_usar = list(COLUMNAS_REQUERIDAS) + (columnas_extra or [])
-        cols_presentes = [c for c in cols_a_usar if c in df.columns]
-        cols_faltantes  = [c for c in COLUMNAS_REQUERIDAS if c not in df.columns]
-        return df[cols_presentes], cols_faltantes, list(df.columns)
+
+        cols_faltantes = [c for c in SCHEMA_CNN if c not in df.columns]
+        return df, cols_faltantes, list(df.columns)
     except Exception as e:
         return None, [], str(e)
 
@@ -321,21 +342,21 @@ with st.sidebar:
 # CARGA DE DATOS
 # ─────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
-def cargar_datos(lp_bytes, cp_bytes, mp_files_bytes, modo_fase_key, fase_key):
-    df_lp, wl, _ = leer_csv_cnn(io.BytesIO(lp_bytes))
-    df_cp, wc, _ = leer_csv_cnn(io.BytesIO(cp_bytes))
+def cargar_datos_raw(lp_bytes, cp_bytes, mp_files_bytes, modo_fase_key, fase_key,
+                     _cache_key=None):
+    """Solo lee y filtra por fase. NO clasifica ore."""
+    df_lp, wl, _ = leer_csv_cnn(lp_bytes)
+    df_cp, wc, _ = leer_csv_cnn(cp_bytes)
     df_mp = pd.DataFrame()
     for name, content in mp_files_bytes:
-        dt, _, _ = leer_csv_cnn(io.BytesIO(content))
+        dt, _, _ = leer_csv_cnn(content)
         if dt is not None:
             try:
                 num = int(''.join(filter(str.isdigit, name.replace('.csv','').split('_')[-1])))
                 dt  = dt[dt['extraccion'] == num]
-            except Exception:
-                pass
+            except Exception: pass
             dt['ARCHIVO'] = name
             df_mp = pd.concat([df_mp, dt], ignore_index=True)
-    # Filtrado por fase
     if modo_fase_key == "Por fase" and fase_key is not None:
         if 'fase' in df_lp.columns: df_lp = df_lp[df_lp['fase'] == fase_key]
         if 'fase' in df_cp.columns: df_cp = df_cp[df_cp['fase'] == fase_key]
@@ -357,31 +378,74 @@ lp_bytes       = file_lp.read()
 cp_bytes       = file_cp.read()
 mp_files_bytes = [(f.name, f.read()) for f in files_mp] if files_mp else []
 
+# Hash de cache: detecta archivos modificados con mismo nombre
+cache_key = (
+    (file_lp.name,  len(lp_bytes)),
+    (file_cp.name,  len(cp_bytes)),
+    tuple((n, len(c)) for n,c in mp_files_bytes),
+)
+
 with st.spinner("Cargando datos..."):
-    df_lp, df_cp, df_mp, warn_lp, warn_cp = cargar_datos(
-        lp_bytes, cp_bytes, mp_files_bytes, modo_fase, fase_sel
+    df_lp, df_cp, df_mp, warn_lp, warn_cp = cargar_datos_raw(
+        lp_bytes, cp_bytes, mp_files_bytes,
+        modo_fase, fase_sel, _cache_key=cache_key
     )
 
 if warn_lp: st.warning(f"⚠️ LP — columnas faltantes: {', '.join(warn_lp)}")
 if warn_cp: st.warning(f"⚠️ CP — columnas faltantes: {', '.join(warn_cp)}")
 
-# ── Clasificación y merge ──
-def _ore_lp_row(row): return clasificar_ore_cnn(row, criterios_cnn, '')
-def _ore_cp_row(row): return clasificar_ore_cnn(row, criterios_cnn, '_cp')
+# ── Clasificación en tiempo real (no recarga archivos al cambiar criterios) ──
+def _ore(row, sufijo, crit):
+    ue = row.get(f'ue_fe{sufijo}', 0)
+    if pd.isna(ue): ue = 0
+    if ue != 1: return 'esteril'
+    for c in crit:
+        col = f"{c['var']}{sufijo}"
+        val = row.get(col, np.nan)
+        if pd.isna(val): return 'marginal'
+        op = c['op']
+        if   op == '>=' and not (val >= c['val']): return 'marginal'
+        elif op == '<=' and not (val <= c['val']): return 'marginal'
+        elif op == '>'  and not (val >  c['val']): return 'marginal'
+        elif op == '<'  and not (val <  c['val']): return 'marginal'
+    return 'mineral'
+
+def _ore_lp_row(row): return _ore(row, '',    criterios_cnn)
+def _ore_cp_row(row): return _ore(row, '_cp', criterios_cnn)
 
 df = pd.merge(df_lp, df_cp, on='block_id', how='outer', suffixes=('', '_cp'))
 df['ore_lp']       = df.apply(_ore_lp_row, axis=1)
 df['ore_cp']       = df.apply(_ore_cp_row, axis=1)
-df['conciliacion'] = df.apply(lambda r: conciliacion_fn(r['ore_lp'], r['ore_cp']), axis=1)
+df['conciliacion'] = df['ore_lp'] + '_' + df['ore_cp']
 df['tonelaje_lp']  = df['densidad']    * df['proportional_volume']
 df['tonelaje_cp']  = df['densidad_cp'] * df['proportional_volume']
 
 if not df_mp.empty:
+    df_mp = df_mp.copy()
     df_mp['ore_mp']      = df_mp.apply(_ore_lp_row, axis=1)
     df_mp['tonelaje_mp'] = df_mp['densidad'] * df_mp['proportional_volume']
-    # Normalizar ocurrencias MP
     if 'ocurrencia' in df_mp.columns:
         df_mp['ocurrencia'] = df_mp['ocurrencia'].replace({'gui':'gyd','dis':'gyd'})
+
+# ── dfmp_final: merge df_mp + df_cp por block_id (Cell 31/32) — para cascadas ──
+dfmp_final = pd.DataFrame()
+if not df_mp.empty:
+    df_cp_ren = df_cp.rename(columns={
+        col: f"{col}_cp" for col in df_cp.columns
+        if col not in {'block_id', 'extraccion'}
+    })
+    if 'fe_dtt_cp' not in df_cp_ren.columns and 'fedtt_cp' in df_cp_ren.columns:
+        df_cp_ren = df_cp_ren.rename(columns={'fedtt_cp': 'fe_dtt_cp'})
+    df_cp_ren['tonelaje_cp'] = df_cp_ren['densidad_cp'] * df_cp_ren['proportional_volume_cp']
+    df_cp_ren['ore_cp']      = df_cp_ren.apply(_ore_cp_row, axis=1)
+    dfmp_final = df_mp.merge(
+        df_cp_ren.drop(columns=['extraccion'], errors='ignore'),
+        on='block_id', how='left'
+    )
+    dfmp_final['conciliacion'] = (
+        dfmp_final['ore_mp'] + '_' +
+        dfmp_final['ore_cp'].fillna('esteril')
+    )
 
 
 # ── Tabla mensual ──
@@ -931,36 +995,18 @@ with tab3:
 with tab4:
     st.markdown("### Gráficos de Cascada")
 
-    if df_mp.empty:
+    if df_mp.empty or dfmp_final.empty:
         st.info("Carga los archivos MP para ver las cascadas.")
     else:
-        dfmp_c = df_mp.copy()
-        dfcp_c = df_cp.copy().rename(columns={
-            col: f"{col}_cp" for col in df_cp.columns
-            if col not in {'block_id', 'extraccion'}
-        })
-        # Renombrar fe_dtt en CP
-        if 'fe_dtt_cp' not in dfcp_c.columns and 'fedtt_cp' in dfcp_c.columns:
-            dfcp_c = dfcp_c.rename(columns={'fedtt_cp': 'fe_dtt_cp'})
-        dfcp_c['tonelaje_cp'] = dfcp_c['densidad_cp'] * dfcp_c['proportional_volume_cp']
-        dfcp_c['ore_cp']      = dfcp_c.apply(lambda r: clasificar_ore_cnn(r, '_cp'), axis=1)
-
-        dfmp_final = dfmp_c.merge(
-            dfcp_c.drop(columns=['extraccion'], errors='ignore'),
-            on='block_id', how='left'
-        )
-        dfmp_final['conciliacion'] = dfmp_final.apply(
-            lambda r: conciliacion_fn(r.get('ore_mp','esteril'), r.get('ore_cp','esteril')), axis=1
-        )
-
+        # conc_mp (Cell 33): agrupa dfmp_final por extraccion+conciliacion
+        # tonelaje = tonelaje_mp (MP), tonelaje_cp = tonelaje_cp (CP)
         conc_mp = (
             dfmp_final[dfmp_final['extraccion'] != -99]
-            .groupby(['extraccion','conciliacion'], group_keys=False)
-            .apply(lambda x: (lambda f: pd.Series({
-                'tonelaje':    f['tonelaje_mp'].sum() if not f.empty else 0,
-                'tonelaje_cp': f['tonelaje_cp'].sum() if ('tonelaje_cp' in f.columns and not f.empty) else 0,
-            }))(x[x['ARCHIVO'] == f'output_mp_{int(x.name[0])}.csv']),
-                include_groups=False)
+            .groupby(['extraccion', 'conciliacion'], group_keys=False)
+            .apply(lambda x: pd.Series({
+                'tonelaje':    x['tonelaje_mp'].sum() if 'tonelaje_mp' in x.columns else 0,
+                'tonelaje_cp': x['tonelaje_cp'].sum() if 'tonelaje_cp' in x.columns else 0,
+            }), include_groups=False)
             .reset_index()
         )
 
@@ -1028,15 +1074,14 @@ with tab4:
         with _cm1: casc_mes_ymin = st.number_input("Ton. mín (kt)", value=0,   step=50, key="casc_mes_ymin")
         with _cm2: casc_mes_ymax = st.number_input("Ton. máx (kt)", value=600, step=50, key="casc_mes_ymax")
 
+        # Cell 36: df_mes_seleccionado = conc_mp[conc_mp['extraccion'] == mes]
         df_mes_sel = conc_mp[conc_mp['extraccion'] == mes]
         if modelo_casc_mes == "MP":
             df_casc_mes  = df_mes_sel
-            lbl_proy_mes = f"Proy. MP {mes_abr}"
+            lbl_proy_mes = f"Proyectado MP {mes_abr}"
         else:
             df_lp_mes = df[df['extraccion'] == mes].copy()
             if not df_lp_mes.empty:
-                df_lp_mes['conciliacion'] = df_lp_mes.apply(
-                    lambda r: conciliacion_fn(r['ore_lp'], r['ore_cp']), axis=1)
                 df_casc_mes = (
                     df_lp_mes.groupby('conciliacion')
                     .apply(lambda x: pd.Series({
@@ -1081,14 +1126,16 @@ with tab4:
         with _ca2: casc_acum_ymax = st.number_input("Ton. máx (kt)", value=2000, step=100, key="casc_acum_ymax")
 
         if modelo_casc_acum == "MP":
-            df_casc_acum  = conc_mp[conc_mp['extraccion'] > 0]
-            lbl_proy_acum = "Proyectado"
+            # Cell 38: usa conc_mp (dfmp_final) filtrado hasta el mes seleccionado
+            df_casc_acum  = conc_mp[
+                (conc_mp['extraccion'] > 0) & (conc_mp['extraccion'] <= mes)
+            ]
+            lbl_proy_acum = f"Proyectado MP (hasta {mes_abr})"
         else:
-            df_lp_g = (
-                df[df['extraccion'] > 0].copy()
-            )
-            df_lp_g['conciliacion'] = df_lp_g.apply(
-                lambda r: conciliacion_fn(r['ore_lp'], r['ore_cp']), axis=1)
+            # Cell 40: usa df (LP+CP) con tonelaje_lp y tonelaje_cp
+            df_lp_g = df[
+                (df['extraccion'] > 0) & (df['extraccion'] <= mes)
+            ].copy()
             df_casc_acum = (
                 df_lp_g.groupby('conciliacion')
                 .apply(lambda x: pd.Series({
@@ -1096,7 +1143,7 @@ with tab4:
                     'tonelaje_cp': x['tonelaje_cp'].sum()
                 }), include_groups=False).reset_index()
             )
-            lbl_proy_acum = "Budget LP acum."
+            lbl_proy_acum = f"Budget LP (hasta {mes_abr})"
 
         fig_c2, df_res_c2 = cascada(
             df_casc_acum, lbl_proy_acum, "Real CP acum.",
