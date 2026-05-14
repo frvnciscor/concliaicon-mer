@@ -35,23 +35,32 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-COLUMNAS_REQUERIDAS = [
-    "block_id", "centroid_x", "centroid_y", "centroid_z",
-    "dim_x", "dim_y", "dim_z", "volume", "proportional_volume",
-    "fe", "fem", "fedtt", "dtt", "al2o3", "al2o3dtt",
-    "p", "pdtt", "s", "sdtt", "sio2", "sio2dtt",
-    "v", "vdtt", "densidad", "mag", "ocurrencia",
-    "litologia", "alteracion", "intensidad", "bound",
-    "dominio", "ue_fe", "mine", "categoria", "extraccion"
+SCHEMA_MER = [
+    "block_id",
+    "centroid_x", "centroid_y", "centroid_z",
+    "dim_x", "dim_y", "dim_z",
+    "volume", "proportional_volume", "densidad",
+    "fe", "fem", "fedtt", "dtt",
+    "al2o3", "al2o3dtt", "p", "pdtt", "s", "sdtt",
+    "sio2", "sio2dtt", "v", "vdtt",
+    "mag", "ocurrencia", "bound",
+    "ue_fe", "mine", "categoria", "arcillas", "extraccion",
 ]
+
+COLUMNAS_REQUERIDAS = SCHEMA_MER
 
 VARS_CORTE_CANDIDATAS = [
-    "fe", "fem", "fedtt", "dtt", "mag", "al2o3", "al2o3dtt",
-    "p", "pdtt", "s", "sdtt", "sio2", "sio2dtt", "v", "vdtt", "ue_fe"
+    "fe", "fem", "fedtt", "dtt", "mag",
+    "al2o3", "al2o3dtt", "p", "pdtt", "s", "sdtt",
+    "sio2", "sio2dtt", "v", "vdtt", "arcillas", "ue_fe",
 ]
 
-VARS_CALIDAD    = ['fe', 'fem', 'fedtt', 'p', 's']
-VARS_DISPERSION = ['fe', 'fem', 'fedtt', 'p', 's', 'mag']
+VARS_CALIDAD = [
+    'fe', 'fem', 'fedtt', 'dtt',
+    'al2o3', 'al2o3dtt', 'p', 'pdtt', 's', 'sdtt',
+    'sio2', 'sio2dtt', 'v', 'vdtt', 'mag', 'arcillas',
+]
+VARS_DISPERSION = VARS_CALIDAD
 
 MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
          7:'Jul',8:'Ago',9:'Sep',10:'Oct',11:'Nov',12:'Dic'}
@@ -61,7 +70,7 @@ MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&family=Poppins:wght@600;700&display=swap');
     html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
     .stApp { background-color: #0f1117; color: #e0e0e0; }
     h1, h2, h3 { font-family: 'IBM Plex Mono', monospace; color: #f0c040; letter-spacing: -0.5px; }
@@ -72,11 +81,13 @@ st.markdown("""
     .metric-card.blue { border-left-color: #6699ff; }
     .metric-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px;
                     font-family: 'IBM Plex Mono', monospace; }
-    .metric-value { font-size: 22px; font-weight: 600; color: #f0c040; font-family: 'IBM Plex Mono', monospace; }
+    .metric-value { font-size: 24px; font-weight: 700; color: #f0c040; font-family: 'Poppins', sans-serif; }
     .metric-value.red  { color: #cc4444; }
     .metric-value.green{ color: #44aa66; }
     .metric-value.blue { color: #6699ff; }
     .metric-sub { font-size: 12px; color: #777; font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
+    .metric-dev { font-size: 12px; font-family: 'Poppins', sans-serif; font-weight: 600; margin-top: 4px; }
+    .metric-dev.pos { color: #44aa66; } .metric-dev.neg { color: #cc4444; } .metric-dev.neu { color: #888; }
     .stTabs [data-baseweb="tab"] { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #888; }
     .stTabs [aria-selected="true"] { color: #f0c040 !important; border-bottom: 2px solid #f0c040 !important; }
     .cutoff-box { background: #1a1d27; border: 1px solid #2a2d3a; border-left: 3px solid #6699ff;
@@ -96,21 +107,35 @@ st.markdown("""
 # FUNCIONES AUXILIARES
 # ─────────────────────────────────────────────
 
-def leer_csv_mer(uploaded_file, columnas_extra=None):
+def leer_csv_mer(file_bytes_or_file, columnas_extra=None):
+    """Lee CSV formato Vulcan. Elimina BOM + aplica schema maestro."""
     try:
-        try:
-            header_df = pd.read_csv(uploaded_file, nrows=1, header=None)
-            uploaded_file.seek(0)
-            col_names = header_df.iloc[0].tolist()
-            df = pd.read_csv(uploaded_file, skiprows=4, header=None, names=col_names, low_memory=False)
-        except Exception:
-            uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, low_memory=False)
-        df.columns = [str(c).strip().lower() for c in df.columns]
-        cols_a_usar = list(COLUMNAS_REQUERIDAS) + (columnas_extra or [])
-        cols_presentes = [c for c in cols_a_usar if c in df.columns]
-        cols_faltantes = [c for c in COLUMNAS_REQUERIDAS if c not in df.columns]
-        return df[cols_presentes], cols_faltantes, list(df.columns)
+        if hasattr(file_bytes_or_file, 'read'):
+            raw = file_bytes_or_file.read()
+        else:
+            raw = file_bytes_or_file
+        if raw[:3] == b'\xef\xbb\xbf':
+            raw = raw[3:]
+        buf = io.BytesIO(raw)
+
+        header_df = pd.read_csv(buf, nrows=1, header=None, encoding='utf-8')
+        buf.seek(0)
+        col_names = [str(c).strip().lower() for c in header_df.iloc[0].tolist()]
+        df = pd.read_csv(buf, skiprows=4, header=None,
+                         names=col_names, low_memory=False, encoding='utf-8')
+
+        # Schema maestro
+        cols_schema = SCHEMA_MER + (columnas_extra or [])
+        df = df.reindex(columns=[c for c in cols_schema if c in df.columns
+                                  or c in SCHEMA_MER])
+
+        if 'densidad' in df.columns:
+            df.loc[df['densidad'] == -99, 'densidad'] = 2.7
+        if 'ocurrencia' in df.columns:
+            df['ocurrencia'] = df['ocurrencia'].replace('nn', 'est')
+
+        cols_faltantes = [c for c in SCHEMA_MER if c not in df.columns]
+        return df, cols_faltantes, list(df.columns)
     except Exception as e:
         return None, [], str(e)
 
@@ -308,13 +333,13 @@ with st.sidebar:
 # CARGA DE DATOS
 # ─────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
-def cargar_datos(lp_bytes, cp_bytes, mp_files_bytes, columnas_extra_tuple):
-    ce = list(columnas_extra_tuple)
-    df_lp, wl, _ = leer_csv_mer(io.BytesIO(lp_bytes), ce)
-    df_cp, wc, _ = leer_csv_mer(io.BytesIO(cp_bytes), ce)
+def cargar_datos_raw(lp_bytes, cp_bytes, mp_files_bytes, _cache_key=None):
+    """Solo lee archivos. NO clasifica ore."""
+    df_lp, wl, _ = leer_csv_mer(lp_bytes)
+    df_cp, wc, _ = leer_csv_mer(cp_bytes)
     df_mp = pd.DataFrame()
     for name, content in mp_files_bytes:
-        dt, _, _ = leer_csv_mer(io.BytesIO(content), ce)
+        dt, _, _ = leer_csv_mer(content)
         if dt is not None:
             try:
                 num = int(''.join(filter(str.isdigit, name.replace('.csv', '').split('_')[-1])))
@@ -339,23 +364,30 @@ lp_bytes       = file_lp.read()
 cp_bytes       = file_cp.read()
 mp_files_bytes = [(f.name, f.read()) for f in files_mp] if files_mp else []
 
+cache_key = (
+    (file_lp.name, len(lp_bytes)),
+    (file_cp.name, len(cp_bytes)),
+    tuple((n, len(c)) for n, c in mp_files_bytes),
+)
+
 with st.spinner("Cargando datos..."):
-    df_lp, df_cp, df_mp, warn_lp, warn_cp = cargar_datos(
-        lp_bytes, cp_bytes, mp_files_bytes, tuple(columnas_extra)
+    df_lp, df_cp, df_mp, warn_lp, warn_cp = cargar_datos_raw(
+        lp_bytes, cp_bytes, mp_files_bytes, _cache_key=cache_key
     )
 
 if warn_lp: st.warning(f"⚠️ LP — columnas faltantes: {', '.join(warn_lp)}")
 if warn_cp: st.warning(f"⚠️ CP — columnas faltantes: {', '.join(warn_cp)}")
 
-# ── Merge + clasificación ──
+# ── Clasificación en tiempo real ──
 df = pd.merge(df_lp, df_cp, on='block_id', how='outer', suffixes=('', '_cp'))
 df['ore_lp']       = df.apply(lambda r: clasificar_ore(r, criterios, ''),    axis=1)
 df['ore_cp']       = df.apply(lambda r: clasificar_ore(r, criterios, '_cp'), axis=1)
-df['conciliacion'] = df.apply(lambda r: conciliacion_fn(r['ore_lp'], r['ore_cp']), axis=1)
+df['conciliacion'] = df['ore_lp'] + '_' + df['ore_cp']
 df['tonelaje_lp']  = df['densidad']    * df['proportional_volume']
 df['tonelaje_cp']  = df['densidad_cp'] * df['proportional_volume']
 
 if not df_mp.empty:
+    df_mp = df_mp.copy()
     df_mp['ore_mp']      = df_mp.apply(lambda r: clasificar_ore(r, criterios, ''), axis=1)
     df_mp['tonelaje_mp'] = df_mp['densidad'] * df_mp['proportional_volume']
 
@@ -501,6 +533,58 @@ with tab1:
 
     st.markdown("---")
 
+    # ── Desviaciones — tarjetas estilo MLC ──
+    st.markdown("#### Desviaciones")
+    dev_modelo = st.radio("Comparar CP contra:", ["LP", "MP"], horizontal=True, key="dev_mod")
+    k_ton_dev = "tonelaje"    if dev_modelo == "LP" else "tonelaje_mp"
+    k_fe_dev  = "fe"          if dev_modelo == "LP" else "fe_mp"
+    k_fem_dev = "fem"         if dev_modelo == "LP" else "fem_mp"
+    k_fed_dev = "fedtt"       if dev_modelo == "LP" else "fedtt_mp"
+
+    def _dev(src, col_a, col_b, fmt_v="{:+,.1f}", fmt_p="{:+.1f}"):
+        try:
+            a = src[col_a].values[0]; b = src[col_b].values[0]
+            if pd.isna(a) or pd.isna(b): return "—", "—", "neu"
+            diff = float(b) - float(a)
+            pct  = diff / abs(float(a)) * 100 if float(a) != 0 else 0
+            cls  = "pos" if diff >= 0 else "neg"
+            return fmt_v.format(diff), fmt_p.format(pct), cls
+        except: return "—", "—", "neu"
+
+    st.markdown(f"**Mes — {mes_abr}**")
+    d1, d2, d3, d4 = st.columns(4)
+    for w, lbl, ka, kb in [
+        (d1, f"Ton. {dev_modelo} → CP (kt)", k_ton_dev, "tonelaje_cp"),
+        (d2, f"Fe {dev_modelo} → CP (%)",    k_fe_dev,  "fe_cp"),
+        (d3, f"FeM {dev_modelo} → CP (%)",   k_fem_dev, "fem_cp"),
+        (d4, f"FeDTT {dev_modelo} → CP (%)", k_fed_dev, "fedtt_cp"),
+    ]:
+        dv, dp, cls = _dev(mes_row, ka, kb)
+        with w:
+            st.markdown(f"""<div class='metric-card'>
+                <div class='metric-label'>{lbl}</div>
+                <div class='metric-dev {cls}'>{dv}</div>
+                <div class='metric-dev {cls}' style='font-size:11px;'>{dp}%</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown(f"**Acumulado anual**")
+    d5, d6, d7, d8 = st.columns(4)
+    for w, lbl, ka, kb in [
+        (d5, f"Ton. {dev_modelo} → CP (kt)", k_ton_dev, "tonelaje_cp"),
+        (d6, f"Fe {dev_modelo} → CP (%)",    k_fe_dev,  "fe_cp"),
+        (d7, f"FeM {dev_modelo} → CP (%)",   k_fem_dev, "fem_cp"),
+        (d8, f"FeDTT {dev_modelo} → CP (%)", k_fed_dev, "fedtt_cp"),
+    ]:
+        dv, dp, cls = _dev(total_row, ka, kb)
+        with w:
+            st.markdown(f"""<div class='metric-card'>
+                <div class='metric-label'>{lbl}</div>
+                <div class='metric-dev {cls}'>{dv}</div>
+                <div class='metric-dev {cls}' style='font-size:11px;'>{dp}%</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
     cols_d = [c for c in [
         'mes', 'fe', 'fem', 'fedtt', 'p', 's', 'tonelaje', 'fino',
         'fe_mp', 'fem_mp', 'fedtt_mp', 'p_mp', 's_mp', 'tonelaje_mp', 'fino_mp',
@@ -520,41 +604,8 @@ with tab1:
             .apply(_highlight_rows, axis=1),
         use_container_width=True, hide_index=True
     )
-
-    dl1, dl2, _ = st.columns([1, 1, 3])
-    with dl1:
-        st.download_button("⬇️ Tabla CSV", csv_bytes(tabla_mensual[cols_d]),
-                           "balance_mensual.csv", "text/csv", key="dl_tabla")
-
-    st.markdown("### Desviaciones CP vs ...")
-    modelo_desv = st.radio("Comparar CP contra:", ["MP", "LP"], horizontal=True, key="r_desv")
-    suf_desv    = "_mp" if modelo_desv == "MP" else ""
-    lbl_desv    = modelo_desv
-
-    vd = [v for v in ['fe', 'fem', 'fedtt', 'p', 's', 'tonelaje', 'fino']
-          if f'{v}_cp' in tabla_mensual.columns and f'{v}{suf_desv}' in tabla_mensual.columns]
-    desv = pd.DataFrame({'mes': tabla_mensual['mes']})
-    for v in vd:
-        ref = tabla_mensual[f'{v}{suf_desv}']
-        desv[v] = ((tabla_mensual[f'{v}_cp'] - ref) / ref * 100).replace([np.inf, -np.inf], np.nan)
-
-    st.markdown(f"*Desviación (%) = (CP − {lbl_desv}) / {lbl_desv} × 100*")
-
-    def _color_dev(val):
-        if pd.isna(val) or val == 0: return ''
-        return 'color:#cc4444;font-weight:600' if val < 0 else 'color:#44aa66;font-weight:600'
-
-    try:
-        styled_desv = desv.style.map(_color_dev, subset=vd)
-    except AttributeError:
-        styled_desv = desv.style.applymap(_color_dev, subset=vd)
-
-    st.dataframe(styled_desv.format({v: '{:+.2f}%' for v in vd}, na_rep='—'),
-                 use_container_width=True, hide_index=True)
-
-    with dl2:
-        st.download_button("⬇️ Desviaciones CSV", csv_bytes(desv),
-                           "desviaciones.csv", "text/csv", key="dl_desv")
+    st.download_button("⬇️ Tabla CSV", csv_bytes(tabla_mensual[cols_d]),
+                       "balance_mensual.csv", "text/csv", key="dl_tabla")
 
 
 # ─────────────────────────────────────────────
@@ -564,15 +615,20 @@ with tab2:
     plt.rcParams['font.family'] = 'DejaVu Sans'
 
     st.markdown("#### ⚙️ Opciones de visualización")
+
+    st.markdown("**Extracción Mensual**")
     ca, cb, cc, cd = st.columns(4)
-    with ca:
-        ton_ymin = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ton_ymin")
-    with cb:
-        ton_ymax = st.number_input("Ton. máx (kt)", value=700,  step=50,  key="ton_ymax")
-    with cc:
-        ley_ymin = st.number_input("Ley mín (%)",  value=10.0, step=1.0, key="ley_ymin")
-    with cd:
-        ley_ymax = st.number_input("Ley máx (%)",  value=70.0, step=1.0, key="ley_ymax")
+    with ca: ton_ymin_m = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ty0m")
+    with cb: ton_ymax_m = st.number_input("Ton. máx (kt)", value=700,  step=50,  key="ty1m")
+    with cc: ley_ymin_m = st.number_input("Ley mín (%)",  value=10.0, step=1.0, key="ly0m")
+    with cd: ley_ymax_m = st.number_input("Ley máx (%)",  value=45.0, step=1.0, key="ly1m")
+
+    st.markdown("**Extracción Trimestral**")
+    ca2, cb2, cc2, cd2 = st.columns(4)
+    with ca2: ton_ymin_t = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ty0t")
+    with cb2: ton_ymax_t = st.number_input("Ton. máx (kt)", value=2000, step=50,  key="ty1t")
+    with cc2: ley_ymin_t = st.number_input("Ley mín (%)",  value=10.0, step=1.0, key="ly0t")
+    with cd2: ley_ymax_t = st.number_input("Ley máx (%)",  value=45.0, step=1.0, key="ly1t")
 
     show_annot = st.checkbox("Mostrar etiquetas en barras", value=True, key="show_annot")
 
@@ -635,14 +691,14 @@ with tab2:
     ax1.set_xlim(-0.5, 11.5)  # forzar siempre los 12 meses en el eje X
     ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
     ax1.tick_params(colors='#444')
-    ax1.set_ylim(ton_ymin, ton_ymax)
+    ax1.set_ylim(ton_ymin_m, ton_ymax_m)
     style_ax(ax1)
 
     ax2 = ax1.twinx(); ax2.set_facecolor('white')
     ax2.plot(pos, cal_mod, marker='.', color=line_color,   lw=1.8, label=f'{var_cal.upper()} {label_mod}')
     ax2.plot(pos, cal_cp,  marker='.', color=col_cp_line,  lw=1.8, label=f'{var_cal.upper()} CP')
     ax2.set_ylabel(f'Ley {var_cal.upper()} (%)', color='#444')
-    ax2.set_ylim(ley_ymin, ley_ymax)
+    ax2.set_ylim(ley_ymin_m, ley_ymax_m)
     ax2.tick_params(colors='#444')
     for sp in ['top','bottom']: ax2.spines[sp].set_visible(False)
     for sp in ['left','right']: ax2.spines[sp].set_color('#ccc')
@@ -693,7 +749,7 @@ with tab2:
     ax1.set_xticks(pos2); ax1.set_xticklabels(tabla_trim['trimestre'], color='#444')
     ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
     ax1.tick_params(colors='#444')
-    ax1.set_ylim(ton_ymin, ton_ymax)
+    ax1.set_ylim(ton_ymin_t, ton_ymax_t)
     style_ax(ax1)
 
     ax2b = ax1.twinx(); ax2b.set_facecolor('white')
@@ -705,7 +761,7 @@ with tab2:
         if cc_col in tabla_trim.columns:
             ax2b.plot(pos2, tabla_trim[cc_col], marker='.', color=line_c, lw=1.8, label=label)
     ax2b.set_ylabel(f'Ley {var_cal.upper()} (%)', color='#444')
-    ax2b.set_ylim(ley_ymin, ley_ymax)
+    ax2b.set_ylim(ley_ymin_t, ley_ymax_t)
     ax2b.tick_params(colors='#444')
     for sp in ['top','bottom']: ax2b.spines[sp].set_visible(False)
     for sp in ['left','right']: ax2b.spines[sp].set_color('#ccc')
@@ -722,6 +778,7 @@ with tab2:
                        "extraccion_trimestral.png", "image/png", key="dl_png_trim")
 
     st.markdown("### Extracción Acumulada")
+    show_ann_acum = st.checkbox("Mostrar etiquetas en acumulado", value=True, key="sann_acum")
     fig3, ax3 = make_fig((14, 5))
     for col, label, color, offset in [('tonelaje','LP',col_lp,-18),
                                        ('tonelaje_mp','MP',col_mp,-10),
@@ -729,9 +786,10 @@ with tab2:
         if col in tabla_plot.columns:
             cum = tabla_plot[col].cumsum()
             ax3.plot(tabla_plot['mes'], cum, marker='o', label=label, color=color, lw=1.8)
-            for i, (m, v) in enumerate(zip(tabla_plot['mes'], cum)):
-                ax3.annotate(f'{v:,.1f}', xy=(i, v), xytext=(0, offset),
-                             textcoords='offset points', ha='center', fontsize=7, color=color)
+            if show_ann_acum:
+                for i, (m, v) in enumerate(zip(tabla_plot['mes'], cum)):
+                    ax3.annotate(f'{v:,.1f}', xy=(i, v), xytext=(0, offset),
+                                 textcoords='offset points', ha='center', fontsize=7, color=color)
 
     if target_ton > 0:
         monthly_target = target_ton / 12
@@ -774,14 +832,37 @@ with tab3:
 
         cg2, cg3 = st.columns(2)
         with cg2:
-            grid_x = st.number_input("Espaciado grilla X (m)", value=20, step=5, min_value=5)
+            grid_x = st.number_input("Espaciado grilla X (m)", value=100, step=25, min_value=10, key="gx")
         with cg3:
-            grid_y = st.number_input("Espaciado grilla Y (m)", value=20, step=5, min_value=5)
+            grid_y = st.number_input("Espaciado grilla Y (m)", value=100, step=25, min_value=10, key="gy")
 
         try:
-            cota       = df_mp.loc[df_mp['extraccion'] == mes, 'centroid_z'].min() + 12.5
-            banco_real = cota - 6.25
-            df_mp_cota = df_mp[(df_mp['centroid_z'] == cota) & (df_mp['extraccion'] <= mes)].copy()
+            BENCH_HEIGHT = 12.5
+            HALF_BENCH   = BENCH_HEIGHT / 2  # 6.25
+
+            z_disponibles = sorted(
+                df_mp.loc[df_mp['extraccion'] == mes, 'centroid_z'].dropna().unique()
+            )
+            if not z_disponibles:
+                st.warning(f"Sin bloques para extraccion == {mes}.")
+                st.stop()
+
+            n_bancos = min(3, len(z_disponibles))
+            nb1, nb2, _ = st.columns([1, 1, 3])
+            with nb1:
+                banco_idx = st.number_input("Banco (0=más bajo, +1, +2)",
+                                            min_value=0, max_value=n_bancos-1,
+                                            value=0, step=1, key="banco_idx")
+            cota       = z_disponibles[banco_idx]
+            banco_real = cota - HALF_BENCH
+            with nb2:
+                st.markdown(f"<div class='cutoff-box'>Banco<br><b>Z = {banco_real:.1f} m</b><br>"
+                            f"(centroide Z = {cota:.1f})</div>", unsafe_allow_html=True)
+
+            df_mp_cota = df_mp[
+                (np.abs(df_mp['centroid_z'] - cota) < HALF_BENCH + 0.01) &
+                (df_mp['extraccion'] <= mes)
+            ].copy()
             df_cp_cota = df.merge(
                 df_mp_cota[['centroid_x','centroid_y','centroid_z']],
                 on=['centroid_x','centroid_y','centroid_z'], how='inner'
@@ -1089,64 +1170,112 @@ with tab5:
     if df_mp.empty:
         st.info("Carga los archivos MP para el análisis de dispersión.")
     else:
-        ue_sel = st.selectbox("UE_FE", [1, 2, 3], index=0)
+        _d1, _d2, _d3 = st.columns(3)
+        with _d1:
+            modelo_disp = st.radio("Modelo vs CP:", ["MP", "LP"],
+                                   horizontal=True, key="modelo_disp")
+        with _d2:
+            periodo_disp = st.radio("Período:", ["Mes", "Acumulado"],
+                                    horizontal=True, key="periodo_disp")
+        with _d3:
+            col_ue = 'ue_fe' if 'ue_fe' in df_mp.columns else None
+            if col_ue:
+                ue_vals = sorted([int(x) for x in df_mp[col_ue].dropna().unique()
+                                  if str(x).replace('.0','').lstrip('-').isdigit()
+                                  and 1 <= float(x) < 10])
+            else:
+                ue_vals = [1, 2, 3]
+            ue_vals = ue_vals or [1, 2]
+            ue_sel = st.multiselect("UE_FE:", ue_vals,
+                                    default=ue_vals[:2], key="ue_fe_sel_mer")
 
-        arch    = f'output_mp_{mes}.csv'
-        df_mp_f = df_mp[df_mp['ARCHIVO'] == arch].drop_duplicates('block_id')
-        df_cp_f = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id')
-        merged  = pd.merge(df_cp_f, df_mp_f, on='block_id', suffixes=('_cp','_mp'))
-
-        if 'ue_fe_cp' in merged.columns and 'ue_fe_mp' in merged.columns:
-            df_filt = merged[(merged['ue_fe_cp'] == ue_sel) & (merged['ue_fe_mp'] == ue_sel)].copy()
-        else:
-            df_filt = merged.copy()
-
-        col_x = f'{var_disp_global}_cp'
-        col_y = f'{var_disp_global}_mp'
-
-        if df_filt.empty or col_x not in df_filt.columns or col_y not in df_filt.columns:
-            st.warning(f"Sin datos o columnas '{col_x}'/'{col_y}' no disponibles.")
+        if not ue_sel:
+            st.warning("Selecciona al menos una UE_FE.")
         else:
             try:
-                clean = df_filt[[col_x, col_y]].dropna()
-                xv, yv = clean[col_x], clean[col_y]
-                if len(xv) < 3:
-                    st.warning("Datos insuficientes para calcular regresión.")
-                else:
-                    pr, _       = pearsonr(xv, yv)
-                    sl, ic, *_ = linregress(xv, yv)
-                    max_val     = max(xv.max(), yv.max()) * 1.08
+                import seaborn as _sns
+                clr_p = _sns.color_palette()[0]
+                periodo_lbl = f"Ene–{mes_abr}" if periodo_disp == "Acumulado" else mes_abr
+                arch = f'output_mp_{mes}.csv'
 
-                    fig, ax = make_fig((6, 6))
-                    ax.scatter(xv, yv, s=15, alpha=0.6, color='#4472C4', edgecolors='none')
-                    ax.plot([0, max_val], [0, max_val], color='#aaa', lw=1, linestyle=':')
-                    xf = np.linspace(0, max_val, 100)
-                    ax.plot(xf, sl*xf+ic, color='#cc4444', linestyle='--', lw=1.8)
-                    ax.set_xlim(0, max_val); ax.set_ylim(0, max_val)
+                if periodo_disp == "Acumulado":
+                    df_mp_d = df_mp[df_mp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                    df_cp_d = df_cp[df_cp['extraccion'] <= mes].drop_duplicates('block_id').copy()
+                else:
+                    df_mp_d = df_mp[df_mp['ARCHIVO'] == arch].drop_duplicates('block_id').copy()
+                    df_cp_d = df_cp[df_cp['extraccion'] == mes].drop_duplicates('block_id').copy()
+
+                if modelo_disp == "MP":
+                    merged = pd.merge(
+                        df_cp_d[['block_id', 'extraccion', var_disp_global, 'ue_fe']],
+                        df_mp_d[['block_id', 'extraccion', var_disp_global, 'ue_fe']],
+                        on=['block_id', 'extraccion'], suffixes=('_cp', '_mp')
+                    )
+                    y_col   = f'{var_disp_global}_mp'
+                    y_label = f'{var_disp_global.upper()} MP (%)'
+                    ue_y    = 'ue_fe_mp'; ue_x = 'ue_fe_cp'
+                else:
+                    df_lp_d = df[df['extraccion'] <= mes].drop_duplicates('block_id').copy() \
+                              if periodo_disp == "Acumulado" \
+                              else df[df['extraccion'] == mes].drop_duplicates('block_id').copy()
+                    merged = df_lp_d[[var_disp_global, 'ue_fe',
+                                      f'{var_disp_global}_cp', 'ue_fe_cp']].copy()
+                    merged = merged.rename(columns={
+                        var_disp_global: f'{var_disp_global}_mp', 'ue_fe': 'ue_fe_mp'})
+                    y_col   = f'{var_disp_global}_mp'
+                    y_label = f'{var_disp_global.upper()} LP (%)'
+                    ue_y    = 'ue_fe_mp'; ue_x = 'ue_fe_cp'
+
+                x_col = f'{var_disp_global}_cp'
+                n_ue  = len(ue_sel)
+                fig, axes = plt.subplots(1, n_ue, figsize=(6*n_ue, 6),
+                                         facecolor='white', squeeze=False)
+                axes = axes[0]
+                for ax in axes: ax.set_facecolor('white')
+
+                for idx, ue in enumerate(sorted(ue_sel)):
+                    ax = axes[idx]
+                    if ue_x in merged.columns and ue_y in merged.columns:
+                        df_ue = merged[(merged[ue_x]==ue)&(merged[ue_y]==ue)][[x_col,y_col]].dropna()
+                    else:
+                        df_ue = merged[[x_col, y_col]].dropna()
+
+                    if df_ue.empty:
+                        ax.text(0.5,0.5,f'UE_FE={ue}\nSin datos',
+                                transform=ax.transAxes,ha='center',color='#888')
+                        continue
+
+                    _sns.scatterplot(x=x_col, y=y_col, data=df_ue,
+                                     alpha=1, edgecolors='none', s=20, ax=ax, color=clr_p)
+                    max_val = max(df_ue[x_col].max(), df_ue[y_col].max()) * 1.05
+                    ax.plot([0,max_val],[0,max_val], color='gray', linestyle='-', lw=1)
+                    ax.set_xlim(0,max_val); ax.set_ylim(0,max_val)
                     ax.set_xlabel(f'{var_disp_global.upper()} CP (%)', color='#444')
-                    ax.set_ylabel(f'{var_disp_global.upper()} MP (%)', color='#444')
+                    ax.set_ylabel(y_label, color='#444')
+                    ax.set_title(f'{var_disp_global.upper()} {modelo_disp} vs CP — UE_FE={ue}: {periodo_lbl}',
+                                 color='#222', fontsize=11)
                     style_ax(ax)
-                    ax.text(0.05, 0.93,
-                            f'UE_FE = {ue_sel} · {mes_abr}\n'
-                            f'Pearson r = {pr:.3f}\nn = {len(xv):,}',
-                            transform=ax.transAxes, fontsize=10, color='#333', va='top',
-                            bbox=dict(facecolor='#f5f5f5', edgecolor='#ddd', boxstyle='round,pad=0.4'))
-                    ax_t = ax.inset_axes([0, 1.02, 1, 0.18], sharex=ax)
-                    ax_r = ax.inset_axes([1.02, 0, 0.18, 1], sharey=ax)
-                    ax_t.hist(xv, bins=20, color='#4472C4', alpha=0.75, linewidth=0)
-                    ax_t.set_facecolor('white'); ax_t.axis('off')
-                    ax_r.hist(yv, bins=20, orientation='horizontal', color='#4472C4', alpha=0.75, linewidth=0)
-                    ax_r.set_facecolor('white'); ax_r.axis('off')
-                    ax.set_title(f'{var_disp_global.upper()} MP vs CP — {mes_abr}',
-                                 color='#222', pad=28, fontsize=11)
-                    plt.tight_layout()
-                    cd, _ = st.columns([1, 1])
-                    with cd:
-                        png_disp = save_png(fig)
-                        st.pyplot(fig); plt.close()
-                        st.download_button("⬇️ PNG Dispersión", png_disp,
-                                           f"dispersion_{var_disp_global}_{mes_abr}.png",
-                                           "image/png", key="dl_png_disp")
+
+                    pr, _ = pearsonr(df_ue[x_col], df_ue[y_col])
+                    ax.text(0.05, 0.95, f'Coeficiente de Pearson: {pr:.2f}',
+                            transform=ax.transAxes, fontsize=11, va='top', color='green')
+
+                    ax_top = ax.inset_axes([0,1.02,1,0.2], sharex=ax)
+                    ax_top.hist(df_ue[x_col], bins=20, color=clr_p, alpha=0.9, linewidth=0)
+                    ax_top.axis('off')
+                    ax_right = ax.inset_axes([1.02,0,0.2,1], sharey=ax)
+                    ax_right.hist(df_ue[y_col], bins=20, orientation='horizontal',
+                                  color=clr_p, alpha=0.9, linewidth=0)
+                    ax_right.axis('off')
+
+                plt.suptitle(f'Minas El Romeral — {modelo_disp} vs CP',
+                             color='#222', fontsize=11, y=1.04)
+                plt.tight_layout()
+                png_disp = save_png(fig, dpi=150)
+                st.pyplot(fig); plt.close()
+                st.download_button("⬇️ PNG Dispersión", png_disp,
+                                   f"dispersion_mer_{var_disp_global}_{modelo_disp}_{mes_abr}.png",
+                                   "image/png", key="dl_png_disp")
             except Exception as e:
                 st.error(f"Error en dispersión: {e}")
 
