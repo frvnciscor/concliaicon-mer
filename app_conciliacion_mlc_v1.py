@@ -393,11 +393,22 @@ with tab2:
     plt.rcParams['font.family']='DejaVu Sans'
     titulo_mlc=f"Mina Los Colorados{fase_lbl}{ocu_lbl}"
     st.markdown("#### ⚙️ Opciones")
+
+    # ── Extracción Mensual ──
+    st.markdown("**Extracción Mensual**")
     ca,cb,cc,cd=st.columns(4)
-    with ca: ton_ymin=st.number_input("Ton. mín",value=0,   step=50, key="ty0")
-    with cb: ton_ymax=st.number_input("Ton. máx",value=1500,step=50, key="ty1")
-    with cc: ley_ymin=st.number_input("Ley mín", value=15.0,step=1.0,key="ly0")
-    with cd: ley_ymax=st.number_input("Ley máx", value=45.0,step=1.0,key="ly1")
+    with ca: ton_ymin_m=st.number_input("Ton. mín (kt)",value=0,   step=50, key="ty0m")
+    with cb: ton_ymax_m=st.number_input("Ton. máx (kt)",value=2000,step=50, key="ty1m")
+    with cc: ley_ymin_m=st.number_input("Ley mín (%)",  value=15.0,step=1.0,key="ly0m")
+    with cd: ley_ymax_m=st.number_input("Ley máx (%)",  value=45.0,step=1.0,key="ly1m")
+
+    # ── Extracción Trimestral ──
+    st.markdown("**Extracción Trimestral**")
+    ca2,cb2,cc2,cd2=st.columns(4)
+    with ca2: ton_ymin_t=st.number_input("Ton. mín (kt)",value=0,   step=50, key="ty0t")
+    with cb2: ton_ymax_t=st.number_input("Ton. máx (kt)",value=4500,step=50, key="ty1t")
+    with cc2: ley_ymin_t=st.number_input("Ley mín (%)",  value=15.0,step=1.0,key="ly0t")
+    with cd2: ley_ymax_t=st.number_input("Ley máx (%)",  value=45.0,step=1.0,key="ly1t")
     show_ann=st.checkbox("Etiquetas en barras",value=True,key="sann")
     with st.expander("🎨 Paleta"):
         _a,_b,_c=st.columns(3)
@@ -429,11 +440,11 @@ with tab2:
     if show_ann: ann_bars(ax1,b1,pd.Series(cal)); ann_bars(ax1,b2,pd.Series(calcp))
     ax1.set_ylabel('Tonelaje (kt)',color='#444'); ax1.set_xticks(pos); ax1.set_xticklabels(ml,color='#444')
     ax1.set_xlim(-0.5,11.5); ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
-    ax1.tick_params(colors='#444'); ax1.set_ylim(ton_ymin,ton_ymax); style_ax(ax1)
+    ax1.tick_params(colors='#444'); ax1.set_ylim(ton_ymin_m,ton_ymax_m); style_ax(ax1)
     ax2=ax1.twinx(); ax2.set_facecolor('white')
     ax2.plot(pos,cal,  marker='.',color=lclr, lw=1.8,label=f'{var_cal.upper()} {mod_sel}')
     ax2.plot(pos,calcp,marker='.',color=col_cl,lw=1.8,label=f'{var_cal.upper()} CP')
-    ax2.set_ylabel(f'Ley {var_cal.upper()} (%)',color='#444'); ax2.set_ylim(ley_ymin,ley_ymax)
+    ax2.set_ylabel(f'Ley {var_cal.upper()} (%)',color='#444'); ax2.set_ylim(ley_ymin_m,ley_ymax_m)
     ax2.tick_params(colors='#444')
     for s in ['top','bottom']: ax2.spines[s].set_visible(False)
     for s in ['left','right']:  ax2.spines[s].set_color('#ccc')
@@ -466,11 +477,11 @@ with tab2:
             if show_ann: ann_bars(ax1,bars,tt[cc_c])
     ax1.set_ylabel('Tonelaje (kt)',color='#444'); ax1.set_xticks(p2); ax1.set_xticklabels(tt['trimestre'],color='#444')
     ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}')); ax1.tick_params(colors='#444')
-    ax1.set_ylim(ton_ymin,ton_ymax); style_ax(ax1)
+    ax1.set_ylim(ton_ymin_t,ton_ymax_t); style_ax(ax1)
     ax2b=ax1.twinx(); ax2b.set_facecolor('white')
     for cc_c,lbl,lc in [('cal_lp',f'{var_cal.upper()} LP',col_ll),('cal_mp',f'{var_cal.upper()} MP',col_ml),('cal_cp',f'{var_cal.upper()} CP',col_cl)]:
         if cc_c in tt.columns: ax2b.plot(p2,tt[cc_c],marker='.',color=lc,lw=1.8,label=lbl)
-    ax2b.set_ylabel(f'Ley {var_cal.upper()} (%)',color='#444'); ax2b.set_ylim(ley_ymin,ley_ymax); ax2b.tick_params(colors='#444')
+    ax2b.set_ylabel(f'Ley {var_cal.upper()} (%)',color='#444'); ax2b.set_ylim(ley_ymin_t,ley_ymax_t); ax2b.tick_params(colors='#444')
     for s in ['top','bottom']: ax2b.spines[s].set_visible(False)
     for s in ['left','right']:  ax2b.spines[s].set_color('#ccc')
     h1,l1=ax1.get_legend_handles_labels(); h2,l2=ax2b.get_legend_handles_labels()
@@ -504,6 +515,9 @@ with tab3:
     cv1,cv2=st.columns(2)
     with cv1: panel_m=st.radio("Paneles:",["MP y CP","Solo MP","Solo CP"],horizontal=True,key="pm")
     with cv2: grilla=st.checkbox("Mostrar grilla",value=True)
+    cg1,cg2=st.columns(2)
+    with cg1: grid_x=st.number_input("Espaciado grilla X (m)",value=50,step=25,min_value=10,key="gx")
+    with cg2: grid_y=st.number_input("Espaciado grilla Y (m)",value=50,step=25,min_value=10,key="gy")
     TAM=12.5
     # Cota (Cell 27): cota = df.loc[periodo==mes, centroid_z].min()
     try:
@@ -541,7 +555,10 @@ with tab3:
                 ax.set_title(tit,color='#222',fontsize=10,fontweight='bold')
                 ax.set_xlabel('Este',color='#444'); ax.set_ylabel('Norte',color='#444')
                 ax.tick_params(colors='#444')
-                if grilla: ax.grid(True,color='#ccc',linewidth=0.5)
+                if grilla:
+                    ax.grid(True,color='#ccc',linewidth=0.5)
+                    ax.xaxis.set_major_locator(MultipleLocator(grid_x))
+                    ax.yaxis.set_major_locator(MultipleLocator(grid_y))
                 for s in ['top','right']: ax.spines[s].set_visible(False)
                 for s in ['bottom','left']: ax.spines[s].set_color('#ccc')
                 ax.xaxis.set_major_formatter(FuncFormatter(lambda x,_:f'{int(x):,}'))
