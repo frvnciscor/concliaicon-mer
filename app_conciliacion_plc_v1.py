@@ -647,14 +647,14 @@ with tab2:
         st.markdown("*Defaults = colores originales del notebook*")
         _pc1, _pc2, _pc3 = st.columns(3)
         with _pc1:
-            col_lp      = st.color_picker("LP (barra)",  "#D3D3D3", key="c_lp_bar")
-            col_lp_line = st.color_picker("LP (línea)",  "#008000", key="c_lp_line")
+            col_lp      = st.color_picker("LP (barra)",  "#D3D3D3", key="plc_lp_bar")
+            col_lp_line = st.color_picker("LP (línea)",  "#008000", key="plc_lp_line")
         with _pc2:
-            col_mp      = st.color_picker("MP (barra)",  "#696969", key="c_mp_bar")
-            col_mp_line = st.color_picker("MP (línea)",  "#9370DB", key="c_mp_line")
+            col_mp      = st.color_picker("MP (barra)",  "#696969", key="plc_mp_bar")
+            col_mp_line = st.color_picker("MP (línea)",  "#9370DB", key="plc_mp_line")
         with _pc3:
-            col_cp      = st.color_picker("CP (barra)",  "#000000", key="c_cp_bar")
-            col_cp_line = st.color_picker("CP (línea)",  "#4682B4", key="c_cp_line")
+            col_cp      = st.color_picker("CP (barra)",  "#000000", key="plc_cp_bar")
+            col_cp_line = st.color_picker("CP (línea)",  "#4682B4", key="plc_cp_line")
 
     # ── Gráfico Mensual ──
     st.markdown(f"### Extracción Mensual — LP o MP vs CP  ·  {var_cal.upper()}")
