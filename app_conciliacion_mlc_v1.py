@@ -87,19 +87,46 @@ def pond(df, col_ley, col_ton):
     t=df.loc[m,col_ton].sum()
     return np.nan if t==0 else (df.loc[m,col_ley]*df.loc[m,col_ton]).sum()/t
 
+# ── Schema maestro — columnas fijas en orden definido ──
+SCHEMA = [
+    'block_id',
+    'centroid_x','centroid_y','centroid_z',
+    'dim_x','dim_y','dim_z',
+    'volume','proportional_volume','densidad',
+    'ue_fe','fe','fem','fedtt','dtt','p','s',
+    'sio2','al2o3','v','axb','bwi_cab','bwi_conc',
+    'fase','ocurrencia',
+]
+
+# Columnas que se pueden dropear después del merge — no las usa ningún cálculo
+COLS_DROP_POST_MERGE = [
+    'archivo','archivo_mp','archivo_cp',
+    'block_id_mp','block_id_cp',
+    'periodo_mp','periodo_cp',
+    'volume_mp','volume_cp',
+    'id',                           # ya no se necesita después del merge
+]
+
 # ── Lectura CSV (Cell 4/6/8) ──
 def leer_csv(file_bytes):
-    """Replica exactamente: header_df=read_csv(nrows=1).columns; read_csv(skiprows=4,names=header_df)"""
+    """
+    Lee CSV formato Vulcan (4 filas cabecera).
+    Aplica schema maestro: mismas columnas, mismo orden, independiente del archivo.
+    Columnas faltantes → NaN. Columnas extra → descartadas.
+    """
     raw = file_bytes
-    if raw[:3]==b'\xef\xbb\xbf': raw=raw[3:]   # eliminar BOM
-    buf=io.BytesIO(raw)
-    hdr=pd.read_csv(buf,nrows=1,header=None,encoding='utf-8')
+    if raw[:3] == b'\xef\xbb\xbf': raw = raw[3:]   # eliminar BOM
+    buf = io.BytesIO(raw)
+    hdr = pd.read_csv(buf, nrows=1, header=None, encoding='utf-8')
     buf.seek(0)
-    names=[str(c).strip().lower() for c in hdr.iloc[0].tolist()]
-    df=pd.read_csv(buf,skiprows=4,header=None,names=names,
-                   low_memory=False,encoding='utf-8')
+    names = [str(c).strip().lower() for c in hdr.iloc[0].tolist()]
+    df = pd.read_csv(buf, skiprows=4, header=None, names=names,
+                     low_memory=False, encoding='utf-8')
+    # Aplicar schema: solo columnas necesarias, en orden fijo
+    df = df.reindex(columns=SCHEMA)
+    # Densidad -99 → 2.7
     if 'densidad' in df.columns:
-        df.loc[df['densidad']==-99,'densidad']=2.7
+        df.loc[df['densidad'] == -99, 'densidad'] = 2.7
     return df
 
 # ─── SIDEBAR ───
@@ -145,77 +172,80 @@ with st.sidebar:
 
 # ─── CARGA DE DATOS ───
 @st.cache_data(show_spinner=False)
-def cargar(lp_b,mp_b,cp_b,modo_fase_k,fase_k,cutoff):
+def cargar(lp_b, mp_b, cp_b, modo_fase_k, fase_k, cutoff, _cache_key=None):
     """
-    Replica exactamente Cells 4,6,8,9,11,12,14:
-    - Cada grupo se carga en su propio DataFrame
-    - id = block_id + "_" + str(periodo)
-    - Merge: df_mp.add_suffix('_mp'); df_mp_ren['id']=df_mp['id']; idem CP
-    - Tonelaje: densidad * proportional_volume (proportional_volume sin sufijo para los 3)
+    _cache_key: tupla con (nombre, tamaño) de cada archivo.
+    Fuerza recalculo cuando el usuario sube archivos modificados con el mismo nombre.
     """
     def leer_grupo(files_b):
-        out=pd.DataFrame()
-        for name,content in files_b:
-            try: dt=leer_csv(content)
+        out = pd.DataFrame()
+        for name, content in files_b:
+            try: dt = leer_csv(content)
             except: continue
-            try: num=int(''.join(filter(str.isdigit,name.replace('.csv','').split('_')[-1])))
-            except: num=1
-            dt['archivo']=name
-            dt['periodo']=num
+            try: num = int(''.join(filter(str.isdigit, name.replace('.csv','').split('_')[-1])))
+            except: num = 1
+            dt['archivo'] = name
+            dt['periodo'] = num
             if 'block_id' in dt.columns:
-                dt['id']=dt['block_id'].astype(str)+'_'+dt['periodo'].astype(str)
-            out=pd.concat([out,dt],ignore_index=True)
+                dt['id'] = dt['block_id'].astype(str) + '_' + dt['periodo'].astype(str)
+            out = pd.concat([out, dt], ignore_index=True)
         return out
 
-    df_lp=leer_grupo(lp_b)
-    df_mp=leer_grupo(mp_b)
-    df_cp=leer_grupo(cp_b)
+    df_lp = leer_grupo(lp_b)
+    df_mp = leer_grupo(mp_b)
+    df_cp = leer_grupo(cp_b)
 
     if df_lp.empty: return pd.DataFrame()
 
     # Filtro por fase (Cell 9)
-    if modo_fase_k=="Por fase" and fase_k:
-        for d in [df_lp,df_mp,df_cp]:
+    if modo_fase_k == "Por fase" and fase_k:
+        for d in [df_lp, df_mp, df_cp]:
             if 'fase' in d.columns:
-                d.drop(d[d['fase'].astype(str).str.lower()!=fase_k].index,inplace=True)
+                d.drop(d[d['fase'].astype(str).str.lower() != fase_k].index, inplace=True)
 
     # MERGE EXACTO Cell 9
-    df_mp_ren=df_mp.add_suffix('_mp')
-    df_mp_ren['id']=df_mp['id']
-    df_cp_ren=df_cp.add_suffix('_cp')
-    df_cp_ren['id']=df_cp['id']
-    df=df_lp.merge(df_mp_ren,on='id',how='outer')
-    df=df.merge(df_cp_ren,on='id',how='outer')
+    df_mp_ren = df_mp.add_suffix('_mp'); df_mp_ren['id'] = df_mp['id']
+    df_cp_ren = df_cp.add_suffix('_cp'); df_cp_ren['id'] = df_cp['id']
+    df = df_lp.merge(df_mp_ren, on='id', how='outer')
+    df = df.merge(df_cp_ren, on='id', how='outer')
+
+    # Liberar DataFrames intermedios
+    del df_lp, df_mp, df_cp, df_mp_ren, df_cp_ren
+
+    # Drop columnas innecesarias post-merge
+    cols_to_drop = [c for c in COLS_DROP_POST_MERGE if c in df.columns]
+    if cols_to_drop:
+        df.drop(columns=cols_to_drop, inplace=True)
 
     # Clasificación ore (Cell 11) — vectorizada
-    for ue_col,fem_col,ore_col in [
-        ('ue_fe','fem','ore_lp'),
-        ('ue_fe_mp','fem_mp','ore_mp'),
-        ('ue_fe_cp','fem_cp','ore_cp'),
+    for ue_col, fem_col, ore_col in [
+        ('ue_fe',    'fem',    'ore_lp'),
+        ('ue_fe_mp', 'fem_mp', 'ore_mp'),
+        ('ue_fe_cp', 'fem_cp', 'ore_cp'),
     ]:
-        ue =pd.to_numeric(df.get(ue_col, pd.Series(0,index=df.index)),errors='coerce').fillna(0)
-        fem=pd.to_numeric(df.get(fem_col,pd.Series(np.nan,index=df.index)),errors='coerce').fillna(0)
-        ore=pd.Series('esteril',index=df.index)
-        ore[ue>=1]='marginal'
-        ore[(ue>=1)&(fem>=cutoff)]='mineral'
-        df[ore_col]=ore
+        ue  = pd.to_numeric(df.get(ue_col,  pd.Series(0,      index=df.index)), errors='coerce').fillna(0)
+        fem = pd.to_numeric(df.get(fem_col, pd.Series(np.nan, index=df.index)), errors='coerce').fillna(0)
+        ore = pd.Series('esteril', index=df.index)
+        ore[ue >= 1] = 'marginal'
+        ore[(ue >= 1) & (fem >= cutoff)] = 'mineral'
+        df[ore_col] = ore
 
     # Conciliacion (Cell 11,12)
-    df['conciliacion']   =df['ore_mp']+'_'+df['ore_cp']
-    df['conciliacion_lp']=df['ore_lp']+'_'+df['ore_cp']
+    df['conciliacion']    = df['ore_mp'] + '_' + df['ore_cp']
+    df['conciliacion_lp'] = df['ore_lp'] + '_' + df['ore_cp']
 
     # Tonelajes (Cell 14) — proportional_volume sin sufijo para los 3
-    pv='proportional_volume'
+    pv = 'proportional_volume'
     if 'densidad'    in df.columns and pv in df.columns:
-        df['tonelaje']   =pd.to_numeric(df['densidad'],   errors='coerce')*pd.to_numeric(df[pv],errors='coerce')
+        df['tonelaje']    = pd.to_numeric(df['densidad'],    errors='coerce') * pd.to_numeric(df[pv], errors='coerce')
     if 'densidad_mp' in df.columns and pv in df.columns:
-        df['tonelaje_mp']=pd.to_numeric(df['densidad_mp'],errors='coerce')*pd.to_numeric(df[pv],errors='coerce')
+        df['tonelaje_mp'] = pd.to_numeric(df['densidad_mp'], errors='coerce') * pd.to_numeric(df[pv], errors='coerce')
     if 'densidad_cp' in df.columns and pv in df.columns:
-        df['tonelaje_cp']=pd.to_numeric(df['densidad_cp'],errors='coerce')*pd.to_numeric(df[pv],errors='coerce')
+        df['tonelaje_cp'] = pd.to_numeric(df['densidad_cp'], errors='coerce') * pd.to_numeric(df[pv], errors='coerce')
 
     # nn → est en ocurrencia_cp (Cell 37)
     if 'ocurrencia_cp' in df.columns:
-        df.loc[df['ocurrencia_cp']=='nn','ocurrencia_cp']='est'
+        df.loc[df['ocurrencia_cp'] == 'nn', 'ocurrencia_cp'] = 'est'
 
     return df
 
@@ -227,12 +257,19 @@ if not files_lp or not files_mp or not files_cp:
                 unsafe_allow_html=True)
     st.stop()
 
-lp_b=[(f.name,f.read()) for f in files_lp]
-mp_b=[(f.name,f.read()) for f in files_mp]
-cp_b=[(f.name,f.read()) for f in files_cp]
+lp_b = [(f.name, f.read()) for f in files_lp]
+mp_b = [(f.name, f.read()) for f in files_mp]
+cp_b = [(f.name, f.read()) for f in files_cp]
+
+# Hash de cache: (nombre, tamaño) por archivo — detecta archivos modificados con mismo nombre
+cache_key = (
+    tuple((f.name, len(c)) for f,(_,c) in zip(files_lp, lp_b)),
+    tuple((f.name, len(c)) for f,(_,c) in zip(files_mp, mp_b)),
+    tuple((f.name, len(c)) for f,(_,c) in zip(files_cp, cp_b)),
+)
 
 with st.spinner("Cargando datos..."):
-    df=cargar(lp_b,mp_b,cp_b,modo_fase,fase_sel,cutoff_fem)
+    df = cargar(lp_b, mp_b, cp_b, modo_fase, fase_sel, cutoff_fem, _cache_key=cache_key)
 
 if df.empty: st.error("No se pudieron cargar los datos."); st.stop()
 
