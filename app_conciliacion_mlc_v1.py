@@ -781,26 +781,41 @@ with tab4:
         if t in ('Proyectado','Real'): return ['font-weight:bold']*len(row)
         return ['']*len(row)
 
-    # Mensual (Cell 32): usa conc_mp_all filtrado por mes
-    st.markdown("#### Cascada Mensual (MP vs CP)")
-    _cm1,_cm2,_=st.columns([1,1,3])
+    # ── Cascada Mensual ──
+    st.markdown("#### Cascada Mensual")
+    _cs0,_cm1,_cm2,_=st.columns([1,1,1,2])
+    with _cs0: modelo_casc_mes=st.radio("Modelo vs CP:",["MP","LP"],horizontal=True,key="r_casc_mes_mlc")
     with _cm1: cy0=st.number_input("Ton. mín",value=0,   step=50, key="cmy0")
     with _cm2: cy1=st.number_input("Ton. máx",value=2000,step=50, key="cmy1")
     try:
-        dm_s=conc_mp_all[conc_mp_all['periodo']==mes]
-        def _mp(conc_v,col):
-            s=dm_s[dm_s['conciliacion']==conc_v][col].sum()
-            return s/1000 if not pd.isna(s) else 0
-        proy  =_mp(None,'tonelaje_mp') if False else dm_s[dm_s['conciliacion'].isin(['mineral_mineral','mineral_marginal','mineral_esteril'])]['tonelaje_mp'].sum()/1000
-        mm    =_mp('mineral_marginal','tonelaje_mp')
-        me    =_mp('mineral_esteril', 'tonelaje_mp')
-        mmin  =_mp('mineral_mineral', 'tonelaje_mp')
-        aj    =_mp('mineral_mineral', 'tonelaje_cp')-mmin
-        marg  =_mp('marginal_mineral','tonelaje_cp')
-        est   =_mp('esteril_mineral', 'tonelaje_cp')
-        real  =dm_s[dm_s['conciliacion'].isin(['mineral_mineral','marginal_mineral','esteril_mineral'])]['tonelaje_cp'].sum()/1000
+        if modelo_casc_mes == "MP":
+            # MP vs CP: usa conc_mp_all filtrado por mes
+            dm_s = conc_mp_all[conc_mp_all['periodo'] == mes]
+            def _mp(cv,col): return dm_s[dm_s['conciliacion']==cv][col].sum()/1000 if not dm_s.empty else 0
+            proy  = dm_s[dm_s['conciliacion'].isin(['mineral_mineral','mineral_marginal','mineral_esteril'])]['tonelaje_mp'].sum()/1000
+            mm    = _mp('mineral_marginal','tonelaje_mp')
+            me    = _mp('mineral_esteril', 'tonelaje_mp')
+            mmin  = _mp('mineral_mineral', 'tonelaje_mp')
+            aj    = _mp('mineral_mineral', 'tonelaje_cp') - mmin
+            marg  = _mp('marginal_mineral','tonelaje_cp')
+            est   = _mp('esteril_mineral', 'tonelaje_cp')
+            real  = dm_s[dm_s['conciliacion'].isin(['mineral_mineral','marginal_mineral','esteril_mineral'])]['tonelaje_cp'].sum()/1000
+            lbl_proy_mes = f"Proyectado MP {mes_abr}"
+        else:
+            # LP vs CP: usa conc_lp y conc_cp_v2 filtrado por mes
+            dl_m = conc_lp[conc_lp['periodo'] == mes]
+            dc_m = conc_cp_v2[conc_cp_v2['periodo'] == mes]
+            def _lp_m(cv): return dl_m[dl_m['conciliacion_lp']==cv]['tonelaje'].sum()/1000 if not dl_m.empty else 0
+            def _cp_m(cv): return dc_m[dc_m['conciliacion_lp']==cv]['tonelaje_cp'].sum()/1000 if not dc_m.empty else 0
+            proy  = dl_m[dl_m['conciliacion_lp'].isin(['mineral_mineral','mineral_marginal','mineral_esteril'])]['tonelaje'].sum()/1000 if not dl_m.empty else 0
+            mm    = _lp_m('mineral_marginal'); me=_lp_m('mineral_esteril'); mmin=_lp_m('mineral_mineral')
+            aj    = _cp_m('mineral_mineral') - mmin
+            marg  = _cp_m('marginal_mineral'); est=_cp_m('esteril_mineral')
+            real  = dc_m[dc_m['conciliacion_lp'].isin(['mineral_mineral','marginal_mineral','esteril_mineral'])]['tonelaje_cp'].sum()/1000 if not dc_m.empty else 0
+            lbl_proy_mes = f"Budget LP {mes_abr}"
+
         fw1=waterfall(X_CASC,[proy,-mm,-me,mmin,aj,marg,est,real],
-                      f"Mineral Proyectado/Real ({mes_abr}): {cutoff_str}",
+                      f"Mineral Proyectado/Real ({mes_abr}) — {modelo_casc_mes} vs CP: {cutoff_str}",
                       yrange=[cy0,cy1])
         st.plotly_chart(fw1,use_container_width=True)
         df_r1=pd.DataFrame({'Paso':X_CASC,'Tonelaje (kt)':[round(v,1) for v in [proy,-mm,-me,mmin,aj,marg,est,real]],
@@ -815,23 +830,37 @@ with tab4:
 
     st.markdown("---")
 
-    # Acumulada (Cell 33): usa conc_lp y conc_cp_v2
-    st.markdown("#### Cascada Acumulada LP vs CP")
-    _ca1,_ca2,_=st.columns([1,1,3])
+    # ── Cascada Acumulada ──
+    st.markdown("#### Cascada Acumulada")
+    _cas0,_ca1,_ca2,_=st.columns([1,1,1,2])
+    with _cas0: modelo_casc_acum=st.radio("Modelo vs CP:",["MP","LP"],horizontal=True,key="r_casc_acum_mlc")
     with _ca1: cay0=st.number_input("Ton. mín",value=0,    step=100,key="cay0")
     with _ca2: cay1=st.number_input("Ton. máx",value=15000,step=500,key="cay1")
     try:
-        dl=conc_lp[conc_lp['periodo']<=mes]
-        dc=conc_cp_v2[conc_cp_v2['periodo']<=mes]
-        def _lp(cv): return dl[dl['conciliacion_lp']==cv]['tonelaje'].sum()/1000 if not dl.empty else 0
-        def _cp(cv): return dc[dc['conciliacion_lp']==cv]['tonelaje_cp'].sum()/1000 if not dc.empty else 0
-        proy2 =dl[dl['conciliacion_lp'].isin(['mineral_mineral','mineral_marginal','mineral_esteril'])]['tonelaje'].sum()/1000 if not dl.empty else 0
-        mm2   =_lp('mineral_marginal'); me2=_lp('mineral_esteril'); mmin2=_lp('mineral_mineral')
-        aj2   =_cp('mineral_mineral')-mmin2
-        marg2 =_cp('marginal_mineral'); est2=_cp('esteril_mineral')
-        real2 =dc[dc['conciliacion_lp'].isin(['mineral_mineral','marginal_mineral','esteril_mineral'])]['tonelaje_cp'].sum()/1000 if not dc.empty else 0
+        if modelo_casc_acum == "MP":
+            dm_a = conc_mp_all[conc_mp_all['periodo'] <= mes]
+            def _mp_a(cv,col): return dm_a[dm_a['conciliacion']==cv][col].sum()/1000 if not dm_a.empty else 0
+            proy2  = dm_a[dm_a['conciliacion'].isin(['mineral_mineral','mineral_marginal','mineral_esteril'])]['tonelaje_mp'].sum()/1000
+            mm2    = _mp_a('mineral_marginal','tonelaje_mp'); me2=_mp_a('mineral_esteril','tonelaje_mp')
+            mmin2  = _mp_a('mineral_mineral', 'tonelaje_mp')
+            aj2    = _mp_a('mineral_mineral', 'tonelaje_cp') - mmin2
+            marg2  = _mp_a('marginal_mineral','tonelaje_cp'); est2=_mp_a('esteril_mineral','tonelaje_cp')
+            real2  = dm_a[dm_a['conciliacion'].isin(['mineral_mineral','marginal_mineral','esteril_mineral'])]['tonelaje_cp'].sum()/1000
+            lbl_proy_acum = f"Proyectado MP (hasta {mes_abr})"
+        else:
+            dl = conc_lp[conc_lp['periodo'] <= mes]
+            dc = conc_cp_v2[conc_cp_v2['periodo'] <= mes]
+            def _lp(cv): return dl[dl['conciliacion_lp']==cv]['tonelaje'].sum()/1000 if not dl.empty else 0
+            def _cp(cv): return dc[dc['conciliacion_lp']==cv]['tonelaje_cp'].sum()/1000 if not dc.empty else 0
+            proy2  = dl[dl['conciliacion_lp'].isin(['mineral_mineral','mineral_marginal','mineral_esteril'])]['tonelaje'].sum()/1000 if not dl.empty else 0
+            mm2    = _lp('mineral_marginal'); me2=_lp('mineral_esteril'); mmin2=_lp('mineral_mineral')
+            aj2    = _cp('mineral_mineral') - mmin2
+            marg2  = _cp('marginal_mineral'); est2=_cp('esteril_mineral')
+            real2  = dc[dc['conciliacion_lp'].isin(['mineral_mineral','marginal_mineral','esteril_mineral'])]['tonelaje_cp'].sum()/1000 if not dc.empty else 0
+            lbl_proy_acum = f"Budget LP (hasta {mes_abr})"
+
         fw2=waterfall(X_CASC,[proy2,-mm2,-me2,mmin2,aj2,marg2,est2,real2],
-                      f"Mineral Proyectado/Real Acumulado (hasta {mes_abr}): {cutoff_str}",
+                      f"Mineral Proyectado/Real Acumulado (hasta {mes_abr}) — {modelo_casc_acum} vs CP: {cutoff_str}",
                       yrange=[cay0,cay1])
         st.plotly_chart(fw2,use_container_width=True)
         df_r2=pd.DataFrame({'Paso':X_CASC,'Tonelaje (kt)':[round(v,1) for v in [proy2,-mm2,-me2,mmin2,aj2,marg2,est2,real2]],
