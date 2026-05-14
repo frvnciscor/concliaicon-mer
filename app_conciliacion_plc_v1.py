@@ -35,15 +35,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-COLUMNAS_REQUERIDAS = [
-    "block_id", "centroid_x", "centroid_y", "centroid_z",
-    "dim_x", "dim_y", "dim_z", "volume", "proportional_volume",
-    "fe", "fem", "fedtt", "dtt", "al2o3", "al2o3dtt",
-    "p", "pdtt", "s", "sdtt", "sio2", "sio2dtt",
-    "v", "vdtt", "densidad", "mag", "ocurrencia",
-    "litologia", "alteracion", "intensidad", "bound",
-    "dominio", "ue_fe", "mine", "categoria", "extraccion"
+SCHEMA_PLC = [
+    "block_id",
+    "centroid_x", "centroid_y", "centroid_z",
+    "dim_x", "dim_y", "dim_z",
+    "volume", "proportional_volume", "densidad",
+    "fe", "fem", "fedtt", "dtt",
+    "al2o3", "al2o3dtt", "s", "sdtt", "p", "pdtt",
+    "sio2", "sio2dtt", "tio2", "tio2dtt", "mag",
+    "mine", "categoria", "ocurrencia",
+    "dominio", "bound", "ue_fe", "extraccion",
 ]
+
+COLUMNAS_REQUERIDAS = SCHEMA_PLC
 
 VARS_CORTE_CANDIDATAS = [
     "fe", "fem", "fedtt", "dtt", "mag", "al2o3", "al2o3dtt",
@@ -61,7 +65,7 @@ MESES = {1:'Ene',2:'Feb',3:'Mar',4:'Abr',5:'May',6:'Jun',
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&family=Poppins:wght@600;700&display=swap');
     html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
     .stApp { background-color: #0f1117; color: #e0e0e0; }
     h1, h2, h3 { font-family: 'IBM Plex Mono', monospace; color: #f0c040; letter-spacing: -0.5px; }
@@ -72,7 +76,7 @@ st.markdown("""
     .metric-card.blue { border-left-color: #6699ff; }
     .metric-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px;
                     font-family: 'IBM Plex Mono', monospace; }
-    .metric-value { font-size: 22px; font-weight: 600; color: #f0c040; font-family: 'IBM Plex Mono', monospace; }
+    .metric-value { font-size: 24px; font-weight: 700; color: #f0c040; font-family: 'Poppins', sans-serif; }
     .metric-value.red  { color: #cc4444; }
     .metric-value.green{ color: #44aa66; }
     .metric-value.blue { color: #6699ff; }
@@ -96,31 +100,42 @@ st.markdown("""
 # FUNCIONES AUXILIARES
 # ─────────────────────────────────────────────
 
-def leer_csv_plc(uploaded_file, columnas_extra=None):
+def leer_csv_plc(file_bytes_or_file, columnas_extra=None):
+    """Lee CSV formato Vulcan. Elimina BOM + aplica schema maestro."""
     try:
-        try:
-            header_df = pd.read_csv(uploaded_file, nrows=1, header=None)
-            uploaded_file.seek(0)
-            col_names = header_df.iloc[0].tolist()
-            df = pd.read_csv(uploaded_file, skiprows=4, header=None, names=col_names, low_memory=False)
-        except Exception:
-            uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, low_memory=False)
-        df.columns = [str(c).strip().lower() for c in df.columns]
+        # Leer bytes eliminando BOM si existe
+        if hasattr(file_bytes_or_file, 'read'):
+            raw = file_bytes_or_file.read()
+        else:
+            raw = file_bytes_or_file
+        if raw[:3] == b'\xef\xbb\xbf':
+            raw = raw[3:]
+        buf = io.BytesIO(raw)
+
+        header_df = pd.read_csv(buf, nrows=1, header=None, encoding='utf-8')
+        buf.seek(0)
+        col_names = [str(c).strip().lower() for c in header_df.iloc[0].tolist()]
+        df = pd.read_csv(buf, skiprows=4, header=None,
+                         names=col_names, low_memory=False, encoding='utf-8')
+
+        # Aplicar schema: solo columnas necesarias, mismo orden
+        cols_schema = SCHEMA_PLC + (columnas_extra or [])
+        df = df.reindex(columns=[c for c in cols_schema if c in df.columns
+                                  or c in SCHEMA_PLC])
+
         # Limpieza densidad -99 → 2.7
         if 'densidad' in df.columns:
             df.loc[df['densidad'] == -99, 'densidad'] = 2.7
-        # Limpieza p y s: -99 → NaN
-        for col in ['p', 's', 'p_cp', 's_cp']:
+        # p y s: -99 → NaN
+        for col in ['p', 's']:
             if col in df.columns:
                 df[col] = df[col].replace(-99, np.nan)
         # Ocurrencia: 'nn' → 'est'
         if 'ocurrencia' in df.columns:
             df['ocurrencia'] = df['ocurrencia'].replace('nn', 'est')
-        cols_a_usar = list(COLUMNAS_REQUERIDAS) + (columnas_extra or [])
-        cols_presentes = [c for c in cols_a_usar if c in df.columns]
-        cols_faltantes = [c for c in COLUMNAS_REQUERIDAS if c not in df.columns]
-        return df[cols_presentes], cols_faltantes, list(df.columns)
+
+        cols_faltantes = [c for c in SCHEMA_PLC if c not in df.columns]
+        return df, cols_faltantes, list(df.columns)
     except Exception as e:
         return None, [], str(e)
 
@@ -308,13 +323,13 @@ with st.sidebar:
 # CARGA DE DATOS
 # ─────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
-def cargar_datos(lp_bytes, cp_bytes, mp_files_bytes, columnas_extra_tuple):
-    ce = list(columnas_extra_tuple)
-    df_lp, wl, _ = leer_csv_plc(io.BytesIO(lp_bytes), ce)
-    df_cp, wc, _ = leer_csv_plc(io.BytesIO(cp_bytes), ce)
+def cargar_datos_raw(lp_bytes, cp_bytes, mp_files_bytes, _cache_key=None):
+    """Solo lee archivos. NO clasifica ore — cambiar ley de corte no recarga archivos."""
+    df_lp, wl, _ = leer_csv_plc(lp_bytes)
+    df_cp, wc, _ = leer_csv_plc(cp_bytes)
     df_mp = pd.DataFrame()
     for name, content in mp_files_bytes:
-        dt, _, _ = leer_csv_plc(io.BytesIO(content), ce)
+        dt, _, _ = leer_csv_plc(content)
         if dt is not None:
             try:
                 num = int(''.join(filter(str.isdigit, name.replace('.csv', '').split('_')[-1])))
@@ -339,23 +354,31 @@ lp_bytes       = file_lp.read()
 cp_bytes       = file_cp.read()
 mp_files_bytes = [(f.name, f.read()) for f in files_mp] if files_mp else []
 
+# Hash de cache: detecta archivos modificados con mismo nombre
+cache_key = (
+    (file_lp.name, len(lp_bytes)),
+    (file_cp.name, len(cp_bytes)),
+    tuple((n, len(c)) for n, c in mp_files_bytes),
+)
+
 with st.spinner("Cargando datos..."):
-    df_lp, df_cp, df_mp, warn_lp, warn_cp = cargar_datos(
-        lp_bytes, cp_bytes, mp_files_bytes, tuple(columnas_extra)
+    df_lp, df_cp, df_mp, warn_lp, warn_cp = cargar_datos_raw(
+        lp_bytes, cp_bytes, mp_files_bytes, _cache_key=cache_key
     )
 
 if warn_lp: st.warning(f"⚠️ LP — columnas faltantes: {', '.join(warn_lp)}")
 if warn_cp: st.warning(f"⚠️ CP — columnas faltantes: {', '.join(warn_cp)}")
 
-# ── Merge + clasificación ──
+# ── Clasificación en tiempo real (no recarga archivos al cambiar criterios) ──
 df = pd.merge(df_lp, df_cp, on='block_id', how='outer', suffixes=('', '_cp'))
 df['ore_lp']       = df.apply(lambda r: clasificar_ore_plc(r, criterios, ''),    axis=1)
 df['ore_cp']       = df.apply(lambda r: clasificar_ore_plc(r, criterios, '_cp'), axis=1)
-df['conciliacion'] = df.apply(lambda r: conciliacion_fn(r['ore_lp'], r['ore_cp']), axis=1)
+df['conciliacion'] = df['ore_lp'] + '_' + df['ore_cp']
 df['tonelaje_lp']  = df['densidad']    * df['proportional_volume']
 df['tonelaje_cp']  = df['densidad_cp'] * df['proportional_volume']
 
 if not df_mp.empty:
+    df_mp = df_mp.copy()
     df_mp['ore_mp']      = df_mp.apply(lambda r: clasificar_ore_plc(r, criterios, ''), axis=1)
     df_mp['tonelaje_mp'] = df_mp['densidad'] * df_mp['proportional_volume']
 
