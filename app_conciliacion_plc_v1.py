@@ -81,6 +81,8 @@ st.markdown("""
     .metric-value.green{ color: #44aa66; }
     .metric-value.blue { color: #6699ff; }
     .metric-sub { font-size: 12px; color: #777; font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
+    .metric-dev { font-size: 12px; font-family: 'Poppins', sans-serif; font-weight: 600; margin-top: 4px; }
+    .metric-dev.pos { color: #44aa66; } .metric-dev.neg { color: #cc4444; } .metric-dev.neu { color: #888; }
     .stTabs [data-baseweb="tab"] { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #888; }
     .stTabs [aria-selected="true"] { color: #f0c040 !important; border-bottom: 2px solid #f0c040 !important; }
     .cutoff-box { background: #1a1d27; border: 1px solid #2a2d3a; border-left: 3px solid #6699ff;
@@ -551,35 +553,56 @@ with tab1:
         st.download_button("⬇️ Tabla CSV", csv_bytes(tabla_mensual[cols_d]),
                            "balance_mensual_plc.csv", "text/csv", key="dl_tabla")
 
-    st.markdown("### Desviaciones CP vs ...")
-    modelo_desv = st.radio("Comparar CP contra:", ["MP", "LP"], horizontal=True, key="r_desv")
-    suf_desv    = "_mp" if modelo_desv == "MP" else ""
-    lbl_desv    = modelo_desv
+    # ── Desviaciones — tarjetas estilo MLC ──
+    st.markdown("---")
+    st.markdown("#### Desviaciones")
+    dev_modelo = st.radio("Comparar CP contra:", ["LP", "MP"], horizontal=True, key="dev_mod")
+    k_ton_dev = "tonelaje"    if dev_modelo == "LP" else "tonelaje_mp"
+    k_fe_dev  = "fe"          if dev_modelo == "LP" else "fe_mp"
+    k_fem_dev = "fem"         if dev_modelo == "LP" else "fem_mp"
+    k_fed_dev = "fedtt"       if dev_modelo == "LP" else "fedtt_mp"
 
-    vd = [v for v in ['fe', 'fem', 'fedtt', 'p', 's', 'tonelaje', 'fino']
-          if f'{v}_cp' in tabla_mensual.columns and f'{v}{suf_desv}' in tabla_mensual.columns]
-    desv = pd.DataFrame({'mes': tabla_mensual['mes']})
-    for v in vd:
-        ref = tabla_mensual[f'{v}{suf_desv}']
-        desv[v] = ((tabla_mensual[f'{v}_cp'] - ref) / ref * 100).replace([np.inf, -np.inf], np.nan)
+    def _dev(src, col_a, col_b, fmt_v="{:+,.1f}", fmt_p="{:+.1f}"):
+        try:
+            a = src[col_a].values[0]; b = src[col_b].values[0]
+            if pd.isna(a) or pd.isna(b): return "—", "—", "neu"
+            diff = float(b) - float(a)
+            pct  = diff / abs(float(a)) * 100 if float(a) != 0 else 0
+            cls  = "pos" if diff >= 0 else "neg"
+            return fmt_v.format(diff), fmt_p.format(pct), cls
+        except: return "—", "—", "neu"
 
-    st.markdown(f"*Desviación (%) = (CP − {lbl_desv}) / {lbl_desv} × 100*")
+    st.markdown(f"**Mes — {mes_abr}**")
+    d1, d2, d3, d4 = st.columns(4)
+    for w, lbl, ka, kb in [
+        (d1, f"Ton. {dev_modelo} → CP (kt)", k_ton_dev, "tonelaje_cp"),
+        (d2, f"Fe {dev_modelo} → CP (%)",    k_fe_dev,  "fe_cp"),
+        (d3, f"FeM {dev_modelo} → CP (%)",   k_fem_dev, "fem_cp"),
+        (d4, f"FeDTT {dev_modelo} → CP (%)", k_fed_dev, "fedtt_cp"),
+    ]:
+        dv, dp, cls = _dev(mes_row, ka, kb)
+        with w:
+            st.markdown(f"""<div class='metric-card'>
+                <div class='metric-label'>{lbl}</div>
+                <div class='metric-dev {cls}'>{dv}</div>
+                <div class='metric-dev {cls}' style='font-size:11px;'>{dp}%</div>
+            </div>""", unsafe_allow_html=True)
 
-    def _color_dev(val):
-        if pd.isna(val) or val == 0: return ''
-        return 'color:#cc4444;font-weight:600' if val < 0 else 'color:#44aa66;font-weight:600'
-
-    try:
-        styled_desv = desv.style.map(_color_dev, subset=vd)
-    except AttributeError:
-        styled_desv = desv.style.applymap(_color_dev, subset=vd)
-
-    st.dataframe(styled_desv.format({v: '{:+.2f}%' for v in vd}, na_rep='—'),
-                 use_container_width=True, hide_index=True)
-
-    with dl2:
-        st.download_button("⬇️ Desviaciones CSV", csv_bytes(desv),
-                           "desviaciones_plc.csv", "text/csv", key="dl_desv")
+    st.markdown(f"**Acumulado anual**")
+    d5, d6, d7, d8 = st.columns(4)
+    for w, lbl, ka, kb in [
+        (d5, f"Ton. {dev_modelo} → CP (kt)", k_ton_dev, "tonelaje_cp"),
+        (d6, f"Fe {dev_modelo} → CP (%)",    k_fe_dev,  "fe_cp"),
+        (d7, f"FeM {dev_modelo} → CP (%)",   k_fem_dev, "fem_cp"),
+        (d8, f"FeDTT {dev_modelo} → CP (%)", k_fed_dev, "fedtt_cp"),
+    ]:
+        dv, dp, cls = _dev(total_row, ka, kb)
+        with w:
+            st.markdown(f"""<div class='metric-card'>
+                <div class='metric-label'>{lbl}</div>
+                <div class='metric-dev {cls}'>{dv}</div>
+                <div class='metric-dev {cls}' style='font-size:11px;'>{dp}%</div>
+            </div>""", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
@@ -589,15 +612,34 @@ with tab2:
     plt.rcParams['font.family'] = 'DejaVu Sans'
 
     st.markdown("#### ⚙️ Opciones de visualización")
+
+    st.markdown("**Extracción Mensual**")
     ca, cb, cc, cd = st.columns(4)
-    with ca:
-        ton_ymin = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ton_ymin")
-    with cb:
-        ton_ymax = st.number_input("Ton. máx (kt)", value=500,  step=50,  key="ton_ymax")
-    with cc:
-        ley_ymin = st.number_input("Ley mín (%)",  value=10.0, step=1.0, key="ley_ymin")
-    with cd:
-        ley_ymax = st.number_input("Ley máx (%)",  value=70.0, step=1.0, key="ley_ymax")
+    with ca: ton_ymin_m = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ty0m")
+    with cb: ton_ymax_m = st.number_input("Ton. máx (kt)", value=500,  step=50,  key="ty1m")
+    with cc: ley_ymin_m = st.number_input("Ley mín (%)",  value=10.0, step=1.0, key="ly0m")
+    with cd: ley_ymax_m = st.number_input("Ley máx (%)",  value=45.0, step=1.0, key="ly1m")
+
+    st.markdown("**Extracción Trimestral**")
+    ca2, cb2, cc2, cd2 = st.columns(4)
+    with ca2: ton_ymin_t = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ty0t")
+    with cb2: ton_ymax_t = st.number_input("Ton. máx (kt)", value=1500, step=50,  key="ty1t")
+    with cc2: ley_ymin_t = st.number_input("Ley mín (%)",  value=10.0, step=1.0, key="ly0t")
+    with cd2: ley_ymax_t = st.number_input("Ley máx (%)",  value=45.0, step=1.0, key="ly1t")
+
+
+    with st.expander("🎨 Paleta de colores — Barras y Líneas"):
+        st.markdown("*Defaults = colores originales del notebook*")
+        _pc1, _pc2, _pc3 = st.columns(3)
+        with _pc1:
+            col_lp      = st.color_picker("LP (barra)",  "#D3D3D3", key="c_lp_bar")
+            col_lp_line = st.color_picker("LP (línea)",  "#008000", key="c_lp_line")
+        with _pc2:
+            col_mp      = st.color_picker("MP (barra)",  "#696969", key="c_mp_bar")
+            col_mp_line = st.color_picker("MP (línea)",  "#4682B4", key="c_mp_line")
+        with _pc3:
+            col_cp      = st.color_picker("CP (barra)",  "#000000", key="c_cp_bar")
+            col_cp_line = st.color_picker("CP (línea)",  "#9370DB", key="c_cp_line")
 
     show_annot = st.checkbox("Mostrar etiquetas en barras", value=True, key="show_annot")
 
@@ -656,14 +698,14 @@ with tab2:
     ax1.set_xlim(-0.5, 11.5)
     ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
     ax1.tick_params(colors='#444')
-    ax1.set_ylim(ton_ymin, ton_ymax)
+    ax1.set_ylim(ton_ymin_m, ton_ymax_m)
     style_ax(ax1)
 
     ax2 = ax1.twinx(); ax2.set_facecolor('white')
     ax2.plot(pos, cal_mod, marker='.', color=line_color,  lw=1.8, label=f'{var_cal.upper()} {label_mod}')
     ax2.plot(pos, cal_cp,  marker='.', color=col_cp_line, lw=1.8, label=f'{var_cal.upper()} CP')
     ax2.set_ylabel(f'Ley {var_cal.upper()} (%)', color='#444')
-    ax2.set_ylim(ley_ymin, ley_ymax)
+    ax2.set_ylim(ley_ymin_m, ley_ymax_m)
     ax2.tick_params(colors='#444')
     for sp in ['top','bottom']: ax2.spines[sp].set_visible(False)
     for sp in ['left','right']: ax2.spines[sp].set_color('#ccc')
@@ -715,7 +757,7 @@ with tab2:
     ax1.set_xticks(pos2); ax1.set_xticklabels(tabla_trim['trimestre'], color='#444')
     ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
     ax1.tick_params(colors='#444')
-    ax1.set_ylim(ton_ymin, ton_ymax)
+    ax1.set_ylim(ton_ymin_t, ton_ymax_t)
     style_ax(ax1)
 
     ax2b = ax1.twinx(); ax2b.set_facecolor('white')
@@ -727,7 +769,7 @@ with tab2:
         if cc_col in tabla_trim.columns:
             ax2b.plot(pos2, tabla_trim[cc_col], marker='.', color=line_c, lw=1.8, label=label)
     ax2b.set_ylabel(f'Ley {var_cal.upper()} (%)', color='#444')
-    ax2b.set_ylim(ley_ymin, ley_ymax)
+    ax2b.set_ylim(ley_ymin_t, ley_ymax_t)
     ax2b.tick_params(colors='#444')
     for sp in ['top','bottom']: ax2b.spines[sp].set_visible(False)
     for sp in ['left','right']: ax2b.spines[sp].set_color('#ccc')
@@ -745,6 +787,7 @@ with tab2:
 
     # ── Gráfico Acumulado ──
     st.markdown("### Extracción Acumulada")
+    show_ann_acum = st.checkbox("Mostrar etiquetas en acumulado", value=True, key="sann_acum")
     fig3, ax3 = make_fig((14, 5))
     for col, label, color, offset in [('tonelaje','LP',col_lp,-18),
                                        ('tonelaje_mp','MP',col_mp,-10),
@@ -752,10 +795,11 @@ with tab2:
         if col in tabla_plot.columns:
             cum = tabla_plot[col].cumsum()
             ax3.plot(tabla_plot['mes'], cum, marker='o', label=label, color=color, lw=1.8)
-            for i, (m, v) in enumerate(zip(tabla_plot['mes'], cum)):
-                if not pd.isna(v):
-                    ax3.annotate(f'{v:,.1f}', xy=(i, v), xytext=(0, offset),
-                                 textcoords='offset points', ha='center', fontsize=7, color=color)
+            if show_ann_acum:
+                for i, (m, v) in enumerate(zip(tabla_plot['mes'], cum)):
+                    if not pd.isna(v):
+                        ax3.annotate(f'{v:,.1f}', xy=(i, v), xytext=(0, offset),
+                                     textcoords='offset points', ha='center', fontsize=7, color=color)
 
     if target_ton > 0:
         monthly_target = target_ton / 12
@@ -798,20 +842,35 @@ with tab3:
 
         cg2, cg3 = st.columns(2)
         with cg2:
-            grid_x = st.number_input("Espaciado grilla X (m)", value=50, step=10, min_value=5)
+            grid_x = st.number_input("Espaciado grilla X (m)", value=100, step=25, min_value=10, key="gx")
         with cg3:
-            grid_y = st.number_input("Espaciado grilla Y (m)", value=50, step=10, min_value=5)
+            grid_y = st.number_input("Espaciado grilla Y (m)", value=100, step=25, min_value=10, key="gy")
 
         try:
             # PLC: bench_height=5, bloques 5x5x5
             BENCH_HEIGHT_PLC = 5.0
             HALF_BENCH       = BENCH_HEIGHT_PLC / 2  # 2.5
 
-            # Obtener la cota mínima del mes y redondear al banco más cercano
-            z_min = df_mp.loc[df_mp['extraccion'] == mes, 'centroid_z'].min()
-            # centroid_z ya es el centro del bloque, no necesita ajuste
-            cota       = z_min
-            banco_real = cota
+            # Navegación de bancos ±2 (igual que MLC/CNN)
+            z_disponibles = sorted(
+                df_mp.loc[df_mp['extraccion'] == mes, 'centroid_z'].dropna().unique()
+            )
+            if not z_disponibles:
+                st.warning(f"Sin bloques para extraccion == {mes}.")
+                st.stop()
+
+            n_bancos = min(3, len(z_disponibles))
+            nb1, nb2, _ = st.columns([1, 1, 3])
+            with nb1:
+                banco_idx = st.number_input("Banco (0=más bajo, +1, +2)",
+                                            min_value=0, max_value=n_bancos-1,
+                                            value=0, step=1, key="banco_idx")
+            cota       = z_disponibles[banco_idx]
+            banco_real = cota - HALF_BENCH
+            with nb2:
+                st.markdown(f"<div class='cutoff-box'>Banco<br><b>Z = {banco_real:.1f} m</b><br>"
+                            f"(centroide Z = {cota:.1f})</div>", unsafe_allow_html=True)
+
             df_mp_cota = df_mp[
                 (np.abs(df_mp['centroid_z'] - cota) < HALF_BENCH + 0.01) &
                 (df_mp['extraccion'] <= mes)
