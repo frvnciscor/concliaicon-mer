@@ -2,8 +2,8 @@
 App Streamlit - Conciliación Cerro Negro Norte (CNN) v1
 Basada en la arquitectura de app_conciliacion_mer_v9 / app_conciliacion_plc_v1
 Particularidades CNN:
-  - Ley de corte: ue_fe == 1 AND fem >= 22 AND fe_dtt >= 65.5
-  - Marginal:     ue_fe == 1 AND (fem < 22 OR fe_dtt < 65.5)
+  - Ley de corte: ue_fe >= 1 AND fem >= 22 AND fe_dtt >= 65.5
+  - Marginal:     ue_fe >= 1 AND (fem < 22 OR fe_dtt < 65.5)
   - Ocurrencias:  mac, bre, gui/dis → gyd, est
   - Fases:        análisis completo o por fase (1, 2, 3)
   - Bloques:      10×10×12.5 m
@@ -158,13 +158,13 @@ def ponderado(df, col_ley, col_ton):
 def clasificar_ore_cnn(row, criterios, sufijo=''):
     """
     Clasificación CNN con criterios dinámicos:
-      mineral:  ue_fe == 1 AND todos los criterios se cumplen
-      marginal: ue_fe == 1 AND algún criterio no se cumple
-      esteril:  ue_fe != 1
+      mineral:  ue_fe >= 1 AND todos los criterios se cumplen
+      marginal: ue_fe >= 1 AND algún criterio no se cumple
+      esteril:  ue_fe < 1
     """
     ue = row.get(f'ue_fe{sufijo}', 0)
     if pd.isna(ue): ue = 0
-    if ue != 1:
+    if ue < 1:
         return 'esteril'
     # Evaluar criterios
     for c in criterios:
@@ -284,8 +284,8 @@ with st.sidebar:
     st.markdown("---")
 
     st.markdown("### ✂️ Ley de Corte")
-    st.markdown("<div class='cutoff-box'>CNN base: ue_fe == 1 AND fem ≥ 22 AND fe_dtt ≥ 65.5<br>"
-                "Marginal: ue_fe == 1 AND por debajo del corte</div>",
+    st.markdown("<div class='cutoff-box'>CNN base: ue_fe ≥ 1 AND fem ≥ 22 AND fe_dtt ≥ 65.5<br>"
+                "Marginal: ue_fe ≥ 1 AND por debajo del corte</div>",
                 unsafe_allow_html=True)
 
     VARS_CORTE_CNN = ["fem", "fe_dtt", "fe", "mag", "al2o3", "p", "s", "sio2", "ue_fe"]
@@ -317,7 +317,7 @@ with st.sidebar:
 
     cutoff_str = " AND ".join([f"{c['var']} {c['op']} {c['val']}" for c in criterios_cnn])
     st.markdown(f"<div class='cutoff-box'>🎯 {cutoff_str}<br>"
-                f"Marginal: ue_fe == 1 y por debajo del corte</div>",
+                f"Marginal: ue_fe ≥ 1 y por debajo del corte</div>",
                 unsafe_allow_html=True)
     # Mantener referencias a fem/dtt para uso en scatter (tomar del primer criterio que coincida)
     cutoff_fem_lc = next((c['val'] for c in criterios_cnn if c['var'] == 'fem'), 22.0)
@@ -398,7 +398,7 @@ if warn_cp: st.warning(f"⚠️ CP — columnas faltantes: {', '.join(warn_cp)}"
 def _ore(row, sufijo, crit):
     ue = row.get(f'ue_fe{sufijo}', 0)
     if pd.isna(ue): ue = 0
-    if ue != 1: return 'esteril'
+    if ue < 1: return 'esteril'
     for c in crit:
         col = f"{c['var']}{sufijo}"
         val = row.get(col, np.nan)
@@ -540,7 +540,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 # ─────────────────────────────────────────────
 with tab1:
     st.markdown(f"### Balance Mensual — Cerro Negro Norte{fase_lbl}")
-    st.markdown(f"*Mineral: {cutoff_str} · Marginal: ue_fe == 1 y por debajo del corte*")
+    st.markdown(f"*Mineral: {cutoff_str} · Marginal: ue_fe ≥ 1 y por debajo del corte*")
 
     total_row = tabla_mensual[tabla_mensual['mes'] == 'Total']
 
