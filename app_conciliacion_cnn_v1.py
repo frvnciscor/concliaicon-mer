@@ -621,11 +621,20 @@ with tab2:
     plt.rcParams['font.family'] = 'DejaVu Sans'
 
     st.markdown("#### ⚙️ Opciones de visualización")
+
+    st.markdown("**Extracción Mensual**")
     ca, cb, cc, cd = st.columns(4)
-    with ca: ton_ymin = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ton_ymin")
-    with cb: ton_ymax = st.number_input("Ton. máx (kt)", value=1500, step=50,  key="ton_ymax")
-    with cc: ley_ymin = st.number_input("Ley mín (%)",  value=15.0, step=1.0, key="ley_ymin")
-    with cd: ley_ymax = st.number_input("Ley máx (%)",  value=45.0, step=1.0, key="ley_ymax")
+    with ca: ton_ymin_m = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ty0m")
+    with cb: ton_ymax_m = st.number_input("Ton. máx (kt)", value=1500, step=50,  key="ty1m")
+    with cc: ley_ymin_m = st.number_input("Ley mín (%)",  value=15.0, step=1.0, key="ly0m")
+    with cd: ley_ymax_m = st.number_input("Ley máx (%)",  value=45.0, step=1.0, key="ly1m")
+
+    st.markdown("**Extracción Trimestral**")
+    ca2, cb2, cc2, cd2 = st.columns(4)
+    with ca2: ton_ymin_t = st.number_input("Ton. mín (kt)", value=0,    step=50,  key="ty0t")
+    with cb2: ton_ymax_t = st.number_input("Ton. máx (kt)", value=4500, step=50,  key="ty1t")
+    with cc2: ley_ymin_t = st.number_input("Ley mín (%)",  value=15.0, step=1.0, key="ly0t")
+    with cd2: ley_ymax_t = st.number_input("Ley máx (%)",  value=45.0, step=1.0, key="ly1t")
 
     show_annot = st.checkbox("Mostrar etiquetas en barras", value=True, key="show_annot")
 
@@ -682,14 +691,14 @@ with tab2:
     ax1.set_xticks(pos); ax1.set_xticklabels(meses_labels, color='#444')
     ax1.set_xlim(-0.5, 11.5)
     ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
-    ax1.tick_params(colors='#444'); ax1.set_ylim(ton_ymin, ton_ymax)
+    ax1.tick_params(colors='#444'); ax1.set_ylim(ton_ymin_m, ton_ymax_m)
     style_ax(ax1)
 
     ax2 = ax1.twinx(); ax2.set_facecolor('white')
     ax2.plot(pos, cal_mod, marker='.', color=line_color,  lw=1.8, label=f'{var_cal.upper()} {modelo_sel}')
     ax2.plot(pos, cal_cp,  marker='.', color=col_cp_line, lw=1.8, label=f'{var_cal.upper()} CP')
     ax2.set_ylabel(f'Ley {var_cal.upper()} (%)', color='#444')
-    ax2.set_ylim(ley_ymin, ley_ymax); ax2.tick_params(colors='#444')
+    ax2.set_ylim(ley_ymin_m, ley_ymax_m); ax2.tick_params(colors='#444')
     for sp in ['top','bottom']: ax2.spines[sp].set_visible(False)
     for sp in ['left','right']:  ax2.spines[sp].set_color('#ccc')
 
@@ -738,7 +747,7 @@ with tab2:
     ax1.set_ylabel('Tonelaje (kt)', color='#444')
     ax1.set_xticks(pos2); ax1.set_xticklabels(tabla_trim['trimestre'], color='#444')
     ax1.yaxis.set_major_formatter(mtick.StrMethodFormatter('{x:,.0f}'))
-    ax1.tick_params(colors='#444'); ax1.set_ylim(ton_ymin, ton_ymax)
+    ax1.tick_params(colors='#444'); ax1.set_ylim(ton_ymin_t, ton_ymax_t)
     style_ax(ax1)
 
     ax2b = ax1.twinx(); ax2b.set_facecolor('white')
@@ -750,7 +759,7 @@ with tab2:
         if cc_col in tabla_trim.columns:
             ax2b.plot(pos2, tabla_trim[cc_col], marker='.', color=line_c, lw=1.8, label=label)
     ax2b.set_ylabel(f'Ley {var_cal.upper()} (%)', color='#444')
-    ax2b.set_ylim(ley_ymin, ley_ymax); ax2b.tick_params(colors='#444')
+    ax2b.set_ylim(ley_ymin_t, ley_ymax_t); ax2b.tick_params(colors='#444')
     for sp in ['top','bottom']: ax2b.spines[sp].set_visible(False)
     for sp in ['left','right']:  ax2b.spines[sp].set_color('#ccc')
 
@@ -767,6 +776,7 @@ with tab2:
 
     # ── Gráfico Acumulado ──
     st.markdown("### Extracción Acumulada")
+    show_ann_acum = st.checkbox("Mostrar etiquetas en acumulado", value=True, key="sann_acum")
     fig3, ax3 = make_fig((14, 5))
     for col, label, color, offset in [('tonelaje','LP',col_lp,-18),
                                        ('tonelaje_mp','MP',col_mp,-10),
@@ -774,10 +784,11 @@ with tab2:
         if col in tabla_plot.columns:
             cum = tabla_plot[col].cumsum()
             ax3.plot(tabla_plot['mes'], cum, marker='o', label=label, color=color, lw=1.8)
-            for i, (m, v) in enumerate(zip(tabla_plot['mes'], cum)):
-                if not pd.isna(v):
-                    ax3.annotate(f'{v:,.1f}', xy=(i, v), xytext=(0, offset),
-                                 textcoords='offset points', ha='center', fontsize=7, color=color)
+            if show_ann_acum:
+                for i, (m, v) in enumerate(zip(tabla_plot['mes'], cum)):
+                    if not pd.isna(v):
+                        ax3.annotate(f'{v:,.1f}', xy=(i, v), xytext=(0, offset),
+                                     textcoords='offset points', ha='center', fontsize=7, color=color)
     if target_ton > 0:
         monthly_target = target_ton / 12
         cum_target = np.cumsum([monthly_target]*12)
